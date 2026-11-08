@@ -1,0 +1,55 @@
+# Paste the `phonarr:` block under `services:` in the big docker-compose.yml that runs your Arr stack.
+# It pulls the image GitHub Actions builds (.github/workflows/docker-image.yml) instead of building locally.
+# Full guide: docs/DEPLOYMENT.md §2.1. What isn't supported yet: docs/DEPLOYMENT.md §2.7.
+#
+# Before the first pull:
+#   - The image lives at ghcr.io/danielbaker1994/phonarr (GHCR names are lowercase).
+#   - If the GitHub package is private, log the server in once:
+#       echo <github-token-with-read:packages> | docker login ghcr.io -u DanielBaker1994 --password-stdin
+#     or make the package public on GitHub (Your profile → Packages → phonarr → Package settings).
+#   - Put ARR_GATEWAY_TOKEN=<openssl rand -base64 32> in the .env next to that compose file.
+#   - Use the same PUID/PGID/TZ as your radarr and sonarr services (most Arr stacks keep them in .env).
+#   - Change `networks:` to the network your radarr/sonarr services are on, or delete the `networks:` lines
+#     if every service in the file uses the compose default network. `docker network ls` lists them.
+#     The network must also be declared under the file's top-level `networks:` (most Arr stack files already do).
+#
+# In the setup screen, Radarr is http://radarr:7878 and Sonarr is http://sonarr:8989 (their service names
+# in this file). Not http://localhost:… : inside a container, localhost is the container itself.
+#
+# Update:   docker compose pull phonarr && docker compose up -d phonarr
+# Is it up? docker compose ps phonarr   (STATUS shows "healthy"), or open http://<host>:8787/v1/health
+# Logs:     docker compose logs -f phonarr   or   ./phonarr/logs/gateway.log on the host
+
+services:
+  phonarr:
+    image: ghcr.io/danielbaker1994/phonarr:latest   # or pin a release, e.g. :1.2.0, or a commit: :sha-abc1234
+    container_name: phonarr
+    restart: unless-stopped
+    environment:
+      ARR_GATEWAY_TOKEN: ${ARR_GATEWAY_TOKEN:?set ARR_GATEWAY_TOKEN in .env}
+      PUID: ${PUID:-1000}                   # owner of ./phonarr on the host; the gateway runs as this user
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Etc/UTC}                    # log timestamps and the midnight log roll, e.g. Europe/London
+      LOG_LEVEL: INFO                       # DEBUG adds every Arr call and entry/exit lines
+      # RADARR_URL: http://radarr:7878      # optional preconfiguration on first start; otherwise use the setup screens
+      # RADARR_API_KEY: ${RADARR_API_KEY}
+      # SONARR_URL: http://sonarr:8989
+      # SONARR_API_KEY: ${SONARR_API_KEY}
+    volumes:
+      - ./phonarr:/data                 # gateway.sqlite3, logs/, optional titles.json. Created and chowned to PUID:PGID on start
+    ports:
+      - "8787:8787"                         # web app /, API /v1, API console /console/, health /v1/health
+    healthcheck:                            # same check as the image's HEALTHCHECK; repeated so it shows in this file
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/v1/health', timeout=4)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:                                # keep `docker logs` from growing forever (the app's own files roll daily)
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # depends_on: [radarr, sonarr]          # optional start order; use your service names. Works with either one missing.
+    networks:
+      - arr                                 # the network radarr and sonarr are on

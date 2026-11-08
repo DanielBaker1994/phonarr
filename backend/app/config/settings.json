@@ -1,0 +1,82 @@
+{
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s %(levelname)s [%(request_id)s] %(name)s.%(funcName)s:%(lineno)d: %(message)s",
+    "dir_name": "logs",
+    "main_file": "gateway.log",
+    "date_format": "%Y%m%d",
+    "retention_days": 14,
+    "area_files": {
+      "arr": "arr.log",
+      "compat": "compat.log",
+      "sources": "sources.log"
+    },
+    "trace_level": "DEBUG",
+    "quiet_loggers": [
+      "httpx",
+      "httpcore"
+    ],
+    "quiet_paths": [
+      "/v1/status",
+      "/v1/activity",
+      "/v1/health"
+    ],
+    "slow_request_ms": 5000
+  },
+  "gateway": {
+    "batch_max": 100,
+    "season_modes": [
+      "all",
+      "first",
+      "latest",
+      "future"
+    ],
+    "source_order": [
+      "library",
+      "list",
+      "import_list",
+      "recommended",
+      "search"
+    ],
+    "ttl": {
+      "library": 600,
+      "options": 300,
+      "metadata": 604800,
+      "pool": 600,
+      "search": 300
+    },
+    "retry_cooldown": 30,
+    "compat_every": 86400,
+    "poll": {
+      "watching": 5,
+      "foreground": 20,
+      "idle_active": 60,
+      "foreground_quiet": 60,
+      "client_gone_after": 120,
+      "watching_window": 15,
+      "idle_health_check": 300
+    },
+    "down_reminder_every": 3600,
+    "poller_error_backoff": 10
+  },
+  "arr": {
+    "timeout": 15.0,
+    "connect_timeout": 5.0,
+    "timings_kept": 200,
+    "names": {
+      "radarr": "Radarr",
+      "sonarr": "Sonarr"
+    },
+    "slow_ms": 3000,
+    "default_ports": {
+      "radarr": 7878,
+      "sonarr": 8989
+    }
+  },
+  "env": {
+    "logging.level": "LOG_LEVEL",
+    "gateway.batch_max": "BATCH_MAX",
+    "arr.timeout": "ARR_TIMEOUT",
+    "gateway.poll.idle_health_check": "IDLE_HEALTH_CHECK"
+  }
+}

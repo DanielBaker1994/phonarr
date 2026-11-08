@@ -1,0 +1,44 @@
+# Standalone Phonarr (gateway API + web app), built from this checkout.
+# Run it with ./build-web.sh from the repo root (or: docker compose -f backend/docker-compose.yml up -d --build).
+# Already have one big compose file for your Arr stack? Paste backend/compose-entry.yml into it instead,
+# which pulls the prebuilt image from GitHub (ghcr.io) rather than building here.
+# Joins the Docker network your Radarr/Sonarr already use, so they're reachable as http://radarr:7878 and http://sonarr:8989.
+services:
+  phonarr:
+    image: phonarr:local
+    build:
+      context: ..                    # repo root: the image needs backend/ and web/
+      dockerfile: backend/Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}       # build-web.sh passes git describe, shown in /v1/health
+    container_name: phonarr
+    restart: unless-stopped
+    environment:
+      ARR_GATEWAY_TOKEN: ${ARR_GATEWAY_TOKEN:?set ARR_GATEWAY_TOKEN in backend/.env (openssl rand -base64 32)}
+      PUID: ${PUID:-1000}            # owner of backend/data; the gateway drops to this user
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Etc/UTC}
+      LOG_LEVEL: INFO
+      # Optional list of TMDB/TVDB IDs to browse (default /data/titles.json):
+      # TITLES_FILE: /data/titles.json
+      # Optional: preconfigure instead of using the setup screens.
+      # RADARR_URL: http://radarr:7878
+      # RADARR_API_KEY: ...
+      # SONARR_URL: http://sonarr:8989
+      # SONARR_API_KEY: ...
+    volumes:
+      - ./data:/data
+    ports:
+      - "8787:8787"                  # web app at http://<host>:8787/, API at /v1, API console at /console/
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - arr
+
+networks:
+  arr:
+    external: true
+    name: ${ARR_NETWORK:-arr}

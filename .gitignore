@@ -1,0 +1,15 @@
+# Local secrets and state (never commit)
+backend/.env
+backend/data/gateway.sqlite3*
+backend/data/access_token
+backend/data/logs/
+backend/data/titles.json
+backend/devdata/
+# Generated
+backend/.venv/
+ios/Phonarr.xcodeproj/
+ios/Version.xcconfig
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store

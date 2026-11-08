@@ -1,0 +1,15 @@
+{
+  "logging": {
+    "subsystem": "Phonarr",
+    "dir_name": "Logs",
+    "main_file": "app.log",
+    "date_format": "yyyyMMdd",
+    "retention_days": 14,
+    "max_bytes": 1048576,
+    "min_secret_length": 6,
+    "area_files": {"api": "api.log"}
+  },
+  "api": {
+    "log_body_chars": 300
+  }
+}

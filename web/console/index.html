@@ -1,0 +1,391 @@
+<!doctype html>
+<!--
+  Phonarr API console: every gateway endpoint with a copy-and-paste curl command and a Test button.
+  One self-contained file (no imports, no build). The gateway serves it at http://<host>:8787/console/.
+  When you add or change a /v1 route in backend/app/main.py, add it to ENDPOINTS below:
+  backend/tests/test_gateway.py::test_api_console_lists_every_route fails until you do.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Phonarr API console</title>
+<style>
+  :root { --bg:#f4f4f6; --card:#fff; --text:#141417; --muted:#6b6b73; --border:#dcdce2; --code:#f0f0f3;
+          --accent:#f5a524; --ink:#1c1300; --good:#1f9d45; --bad:#d83035; --warn:#c96d00; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e0e10; --card:#1b1b1e; --text:#f2f2f4; --muted:#9a9aa3; --border:#2e2e33; --code:#111114;
+            --good:#34c759; --bad:#ff453a; --warn:#ff9f0a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 80px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 28px 0 8px; }
+  p { margin: 0 0 8px; }
+  a { color: var(--accent); }
+  code, pre, textarea, input.mono { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  @media (max-width: 640px) { .settings { grid-template-columns: 1fr; } }
+  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  input, textarea, select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--code); color: var(--text); }
+  textarea { min-height: 70px; resize: vertical; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+  .check input { width: auto; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 7px 14px; cursor: pointer; background: var(--code); color: var(--text); border: 1px solid var(--border); }
+  button.primary { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .ep-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .method { font: 700 12px ui-monospace, Menlo, monospace; padding: 2px 7px; border-radius: 5px; color: #fff; }
+  .GET { background: #2f7cf6; } .POST { background: #1f9d45; } .PUT { background: #c96d00; } .DELETE { background: #d83035; }
+  .path { font: 600 14px ui-monospace, Menlo, monospace; }
+  .tag { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); }
+  .tag.changes { color: var(--warn); border-color: var(--warn); }
+  .params { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
+  pre { margin: 8px 0; padding: 10px; background: var(--code); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  .out { margin-top: 10px; }
+  .out .meta { font-size: 13px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .ok { color: var(--good); font-weight: 700; } .err { color: var(--bad); font-weight: 700; }
+  .out pre { max-height: 420px; overflow: auto; white-space: pre; word-break: normal; }
+  .summary { font-size: 14px; }
+  .summary td { padding: 2px 10px 2px 0; }
+  nav.toc { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  nav.toc a { font-size: 13px; text-decoration: none; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--border); color: var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Phonarr API console</h1>
+  <p class="muted">Every gateway endpoint, with a curl command to copy into a terminal and a <b>Test</b> button that runs it here and shows the answer.
+    Endpoints tagged <span class="tag changes">changes things</span> add titles or change settings, so they ask first.
+    <a href="../">Back to the app</a> · <a href="../docs">Swagger (/docs)</a></p>
+
+  <div class="card">
+    <div class="settings">
+      <label class="field">Gateway URL
+        <input id="base" class="mono" spellcheck="false" autocomplete="off" /></label>
+      <label class="field">Access token (ARR_GATEWAY_TOKEN)
+        <input id="token" class="mono" type="password" spellcheck="false" autocomplete="off" placeholder="paste the token from backend/.env" /></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="check"><input type="checkbox" id="showToken" /> Show token</label>
+      <label class="check"><input type="checkbox" id="inline" checked /> Put the real URL and token in the curl commands</label>
+    </div>
+    <div id="varsBox">
+      <p class="muted" style="margin:10px 0 0">Run these two lines once in your terminal, then every command below works as is:</p>
+      <pre id="vars"></pre>
+      <button data-copy="vars">Copy</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="runAll">Test every read-only endpoint</button>
+      <span class="muted" id="runAllNote">Runs the GET checks one after another and lists the results.</span>
+    </div>
+    <div id="summary"></div>
+    <nav class="toc" id="toc"></nav>
+  </div>
+
+  <div id="endpoints"></div>
+</main>
+
+<script>
+// ---------------------------------------------------------------- endpoint list
+// p: parameters. in: "path" fills {name} in the path, "query" goes after ?, "header" is sent as a header.
+// Defaults work against dev mode (./dev.sh, DEV_FAKE_ARR=1): 10331 = Night of the Living Dead, 70001 = Old Variety Show.
+const ENDPOINTS = [
+  { group: "Health", method: "GET", path: "/v1/health", auth: false, safe: true,
+    desc: "Is it up? No token needed. status: ok (servers answer), degraded (Radarr or Sonarr unreachable), setup (none connected). Docker's healthcheck calls this." },
+
+  { group: "Servers", method: "GET", path: "/v1/config", safe: true,
+    desc: "Connection state for Radarr and Sonarr: URL, version, reachable, last API check. Never returns API keys." },
+  { group: "Servers", method: "POST", path: "/v1/config/{service}/test", safe: true,
+    desc: "Test a URL and API key without saving. Leave api_key null to reuse the saved key.",
+    p: [{ name: "service", in: "path", value: "radarr", options: ["radarr", "sonarr"] }],
+    body: { base_url: "http://radarr:7878", api_key: null } },
+  { group: "Servers", method: "PUT", path: "/v1/config/{service}",
+    desc: "Test, then save a connection (what the setup screens do).",
+    p: [{ name: "service", in: "path", value: "radarr", options: ["radarr", "sonarr"] }],
+    body: { base_url: "http://radarr:7878", api_key: "your-radarr-api-key" } },
+  { group: "Servers", method: "DELETE", path: "/v1/config/{service}",
+    desc: "Forget a connection. Titles already in Radarr or Sonarr are not touched.",
+    p: [{ name: "service", in: "path", value: "sonarr", options: ["radarr", "sonarr"] }] },
+
+  { group: "Defaults", method: "GET", path: "/v1/options", safe: true,
+    desc: "Quality profiles and root folders from each server, plus the saved request defaults." },
+  { group: "Defaults", method: "PUT", path: "/v1/defaults",
+    desc: "Save the defaults every one-tap Add uses. Send only the fields you want to change.",
+    body: { radarr_profile_id: 1, season_monitor: "all" } },
+  { group: "Defaults", method: "GET", path: "/v1/request-plan", safe: true,
+    desc: "What a one-tap Add would use right now, by name, or the problem that stops it.",
+    p: [{ name: "type", in: "query", value: "movie", options: ["movie", "series"] }] },
+
+  { group: "Discovery", method: "GET", path: "/v1/discover", safe: true,
+    desc: "Titles to add (titles list, Radarr Discover, library if include_tracked), filter facets and the request plan. q with 2+ characters also searches Radarr/Sonarr.",
+    p: [{ name: "type", in: "query", value: "movie", options: ["movie", "series"] },
+        { name: "q", in: "query", value: "" },
+        { name: "genres", in: "query", value: "" },
+        { name: "decade", in: "query", value: "" },
+        { name: "sort", in: "query", value: "", options: ["", "title", "year_desc", "year_asc", "rating", "popularity", "runtime_asc", "runtime_desc", "recent"] },
+        { name: "include_tracked", in: "query", value: "false", options: ["false", "true"] }] },
+  { group: "Discovery", method: "GET", path: "/v1/titles/{type}/{id}", safe: true,
+    desc: "Details, live status, per-episode progress for shows, and the request plan. id is the TMDB id (films) or TVDB id (shows).",
+    p: [{ name: "type", in: "path", value: "movie", options: ["movie", "series"] }, { name: "id", in: "path", value: "10331" }] },
+  { group: "Discovery", method: "GET", path: "/v1/titles/{type}/{id}/similar", safe: true,
+    desc: "More like this, ranked, with a reason per title. mix=true includes the other media type.",
+    p: [{ name: "type", in: "path", value: "movie", options: ["movie", "series"] }, { name: "id", in: "path", value: "10331" },
+        { name: "mix", in: "query", value: "true", options: ["true", "false"] }, { name: "limit", in: "query", value: "10" }] },
+
+  { group: "Requests", method: "POST", path: "/v1/requests",
+    desc: "One-tap add with the saved defaults. The three override fields are optional and used once only. Same Idempotency-Key = no duplicate.",
+    p: [{ name: "Idempotency-Key", in: "header", value: "console-test-1" }],
+    body: { type: "movie", id: 10331, quality_profile_id: null, root_folder: null, season_monitor: null } },
+  { group: "Requests", method: "POST", path: "/v1/requests/batch",
+    desc: "Add several titles in one call (multi-select). Each item succeeds or fails on its own; optional one-off overrides per type.",
+    body: { items: [{ type: "movie", id: 653 }, { type: "series", id: 70001 }], movie: null, series: null } },
+  { group: "Requests", method: "POST", path: "/v1/requests/{type}/{id}/retry",
+    desc: "Clear a failed download and search again on the existing Radarr/Sonarr record.",
+    p: [{ name: "type", in: "path", value: "movie", options: ["movie", "series"] }, { name: "id", in: "path", value: "3085" }] },
+
+  { group: "Status", method: "GET", path: "/v1/status", safe: true, showHeaders: true,
+    desc: "Every tracked title's state in one payload. Sends ETag and X-Poll-After; repeat with If-None-Match to get a 304.",
+    p: [{ name: "viewing", in: "query", value: "browse", options: ["browse", "activity"] },
+        { name: "If-None-Match", in: "header", value: "" }] },
+  { group: "Status", method: "GET", path: "/v1/activity", safe: true,
+    desc: "In flight, failed and recently added, as shown on the Activity tab." },
+
+  { group: "API check", method: "GET", path: "/v1/compat", safe: true,
+    desc: "The last API compatibility report per server." },
+  { group: "API check", method: "POST", path: "/v1/compat/check", safe: true,
+    desc: "Run Test API now (read-only probes of every Radarr/Sonarr endpoint the gateway uses). Leave service empty for both.",
+    p: [{ name: "service", in: "query", value: "", options: ["", "radarr", "sonarr"] }] },
+
+  { group: "Debug", method: "GET", path: "/v1/debug/bundle", safe: true, binary: "gateway-debug.zip",
+    desc: "Zip of the gateway's redacted logs and state." },
+  { group: "Debug", method: "POST", path: "/v1/debug/bundle", safe: true, binary: "gateway-debug.zip",
+    desc: "Same zip with a frontend's own log added under <name>/ (the web app uses this).",
+    body: { name: "console", log: "hello from the API console", info: {} } },
+];
+
+// ---------------------------------------------------------------- settings
+const $ = (id) => document.getElementById(id);
+const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+$("base").value = store.get("ayr.console.base") || location.origin;
+$("token").value = store.get("ayr.token");   // same key as the web app, so signing in there fills it here
+const base = () => $("base").value.trim().replace(/\/+$/, "");
+const token = () => $("token").value.trim();
+
+for (const id of ["base", "token", "inline"]) $(id).addEventListener("input", () => {
+  store.set("ayr.console.base", $("base").value.trim());
+  if (token()) store.set("ayr.token", token());
+  renderAllCommands();
+});
+$("showToken").addEventListener("change", (e) => { $("token").type = e.target.checked ? "text" : "password"; });
+
+// ---------------------------------------------------------------- curl building
+const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+
+function buildUrl(ep, vals, forCurl) {
+  let path = ep.path;
+  const q = new URLSearchParams();
+  for (const p of ep.p || []) {
+    const v = vals[p.name];
+    if (p.in === "path") path = path.replace(`{${p.name}}`, encodeURIComponent(v));
+    if (p.in === "query" && v !== "") q.set(p.name, v);
+  }
+  const qs = q.toString();
+  const root = forCurl && !$("inline").checked ? "$ARR" : base();
+  return root + path + (qs ? `?${qs}` : "");
+}
+
+function curlFor(ep, vals, bodyText) {
+  const inline = $("inline").checked;
+  const parts = ["curl -sS"];
+  if (ep.showHeaders) parts.push("-i");
+  if (ep.method !== "GET") parts.push(`-X ${ep.method}`);
+  if (ep.auth !== false) parts.push(inline ? `-H ${shq(`Authorization: Bearer ${token() || "PASTE_TOKEN_HERE"}`)}` : `-H "Authorization: Bearer $TOKEN"`);
+  for (const p of ep.p || []) if (p.in === "header" && vals[p.name]) parts.push(`-H ${shq(`${p.name}: ${vals[p.name]}`)}`);
+  if (ep.body !== undefined) {
+    parts.push(`-H 'Content-Type: application/json'`);
+    let compact = bodyText;
+    try { compact = JSON.stringify(JSON.parse(bodyText)); } catch {}
+    parts.push(`-d ${shq(compact)}`);
+  }
+  const url = buildUrl(ep, vals, true);
+  parts.push(inline ? shq(url) : `"${url}"`);
+  if (ep.binary) parts.push(`-o ${ep.binary}`);
+  return parts.join(" ");
+}
+
+function renderVars() {
+  $("varsBox").hidden = $("inline").checked;
+  $("vars").textContent = `ARR=${shq(base())}\nTOKEN=${shq(token() || "PASTE_TOKEN_HERE")}`;
+}
+
+// ---------------------------------------------------------------- copy (works on plain HTTP too)
+async function copyText(text, button) {
+  try {
+    if (navigator.clipboard && isSecureContext) await navigator.clipboard.writeText(text);
+    else {
+      const ta = Object.assign(document.createElement("textarea"), { value: text });
+      ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
+    }
+    const old = button.textContent; button.textContent = "Copied"; setTimeout(() => (button.textContent = old), 1200);
+  } catch { button.textContent = "Select and copy manually"; }
+}
+document.addEventListener("click", (e) => {
+  const id = e.target.dataset?.copy;
+  if (id) copyText($(id).textContent, e.target);
+});
+
+// ---------------------------------------------------------------- run a request
+async function run(ep, vals, bodyText) {
+  const headers = {};
+  if (ep.auth !== false) headers.Authorization = `Bearer ${token()}`;
+  for (const p of ep.p || []) if (p.in === "header" && vals[p.name]) headers[p.name] = vals[p.name];
+  const init = { method: ep.method, headers, cache: "no-store" };
+  if (ep.body !== undefined) {
+    JSON.parse(bodyText);                         // throws a readable error for a typo in the body
+    init.body = bodyText;
+    headers["Content-Type"] = "application/json";
+  }
+  const started = performance.now();
+  const res = await fetch(buildUrl(ep, vals, false), init);
+  const ms = Math.round(performance.now() - started);
+  const shown = ["content-type", "etag", "x-poll-after", "content-disposition"]
+    .map((h) => res.headers.get(h) && `${h}: ${res.headers.get(h)}`).filter(Boolean);
+  let body;
+  if (ep.binary && res.ok) {
+    const blob = await res.blob();
+    body = { download: URL.createObjectURL(blob), size: blob.size };
+  } else {
+    const text = await res.text();
+    try { body = JSON.stringify(JSON.parse(text), null, 2); } catch { body = text || "(empty body)"; }
+  }
+  return { status: res.status, statusText: res.statusText, ms, headers: shown, body };
+}
+
+function renderResult(out, r) {
+  const good = r.status < 400;
+  out.innerHTML = "";
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerHTML = `<span class="${good ? "ok" : "err"}">HTTP ${r.status} ${r.statusText || ""}</span><span class="muted">${r.ms} ms</span>`;
+  out.append(meta);
+  if (r.headers.length) {
+    const h = document.createElement("pre"); h.textContent = r.headers.join("\n"); out.append(h);
+  }
+  if (r.body?.download) {
+    const a = Object.assign(document.createElement("a"), { href: r.body.download, download: "gateway-debug.zip",
+      textContent: `Download zip (${(r.body.size / 1024).toFixed(1)} KB)` });
+    out.append(a);
+  } else {
+    const pre = document.createElement("pre"); pre.textContent = r.body; out.append(pre);
+  }
+}
+
+// ---------------------------------------------------------------- render cards
+const cards = [];
+
+function renderAllCommands() { renderVars(); for (const c of cards) c.update(); }
+
+function card(ep, index) {
+  const el = document.createElement("div");
+  el.className = "card";
+  el.id = `ep-${index}`;
+  const vals = Object.fromEntries((ep.p || []).map((p) => [p.name, p.value]));
+  el.innerHTML = `
+    <div class="ep-head"><span class="method ${ep.method}">${ep.method}</span><span class="path"></span>
+      ${ep.auth === false ? `<span class="tag">no token</span>` : ""}
+      ${ep.safe ? "" : `<span class="tag changes">changes things</span>`}</div>
+    <p class="muted" style="margin-top:6px"></p>
+    <div class="params"></div>
+    <pre class="curl"></pre>
+    <div class="row"><button class="copy">Copy curl</button><button class="primary test">Test</button></div>
+    <div class="out"></div>`;
+  el.querySelector(".path").textContent = ep.path;
+  el.querySelector("p").textContent = ep.desc;
+  const params = el.querySelector(".params");
+  for (const p of ep.p || []) {
+    const label = document.createElement("label");
+    label.className = "field";
+    label.textContent = `${p.name} (${p.in})`;
+    const input = p.options ? document.createElement("select") : document.createElement("input");
+    if (p.options) for (const o of p.options) input.append(new Option(o === "" ? "(none)" : o, o));
+    input.className = "mono";
+    input.value = p.value;
+    input.addEventListener("input", () => { vals[p.name] = input.value; update(); });
+    label.append(input);
+    params.append(label);
+  }
+  let bodyArea = null;
+  if (ep.body !== undefined) {
+    const label = document.createElement("label");
+    label.className = "field";
+    label.style.gridColumn = "1 / -1";
+    label.textContent = "JSON body";
+    bodyArea = document.createElement("textarea");
+    bodyArea.value = JSON.stringify(ep.body, null, 2);
+    bodyArea.rows = Math.min(8, bodyArea.value.split("\n").length);
+    bodyArea.addEventListener("input", () => update());
+    label.append(bodyArea);
+    params.append(label);
+  }
+  if (!params.children.length) params.remove();
+  const curl = el.querySelector(".curl");
+  const out = el.querySelector(".out");
+  function update() { curl.textContent = curlFor(ep, vals, bodyArea ? bodyArea.value : ""); }
+  async function test({ ask = true } = {}) {
+    if (!ep.safe && ask && !confirm(`${ep.method} ${ep.path} changes things on your gateway or in Radarr/Sonarr. Run it?`)) return null;
+    out.innerHTML = `<span class="muted">Running…</span>`;
+    try {
+      const r = await run(ep, vals, bodyArea ? bodyArea.value : "");
+      renderResult(out, r);
+      return r;
+    } catch (e) {
+      out.innerHTML = `<span class="err"></span>`;
+      out.firstChild.textContent = e instanceof SyntaxError ? `The JSON body isn't valid: ${e.message}` : `Request failed: ${e.message}. Is the gateway URL right?`;
+      return { status: 0, error: e.message };
+    }
+  }
+  el.querySelector(".copy").addEventListener("click", (e) => copyText(curl.textContent, e.target));
+  el.querySelector(".test").addEventListener("click", () => test());
+  update();
+  cards.push({ ep, el, update, test });
+  return el;
+}
+
+const root = $("endpoints");
+const toc = $("toc");
+let group = null;
+ENDPOINTS.forEach((ep, i) => {
+  if (ep.group !== group) {
+    group = ep.group;
+    const h = document.createElement("h2");
+    h.textContent = group;
+    h.id = `g-${group.replace(/\W+/g, "-")}`;
+    root.append(h);
+    toc.append(Object.assign(document.createElement("a"), { href: `#${h.id}`, textContent: group }));
+  }
+  root.append(card(ep, i));
+});
+renderVars();
+
+// ---------------------------------------------------------------- test every read-only endpoint
+$("runAll").addEventListener("click", async () => {
+  $("runAll").disabled = true;
+  const rows = [];
+  for (const c of cards.filter((c) => c.ep.method === "GET")) {
+    const r = await c.test({ ask: false });
+    rows.push(`<tr><td class="${r && r.status && r.status < 400 ? "ok" : "err"}">${r?.status || "fail"}</td>
+      <td><a href="#${c.el.id}"><code>${c.ep.method} ${c.ep.path}</code></a></td><td class="muted">${r?.ms ?? ""} ms</td></tr>`);
+  }
+  $("summary").innerHTML = `<table class="summary" style="margin-top:10px">${rows.join("")}</table>`;
+  $("runAll").disabled = false;
+});
+</script>
+</body>
+</html>

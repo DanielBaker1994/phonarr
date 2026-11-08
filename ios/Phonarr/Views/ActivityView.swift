@@ -1,0 +1,75 @@
+import SwiftUI
+
+struct ActivityView: View {
+    @Environment(AppModel.self) private var model
+    @State private var loaded = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ServiceBanner().listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                let failed = model.activity.filter { live($0).state == .failed }
+                let active = model.activity.filter { live($0).state != .failed && live($0).state != .complete }
+                let done = model.activity.filter { live($0).state == .complete }
+                if !failed.isEmpty { Section("Needs attention") { rows(failed) } }
+                if !active.isEmpty { Section("In progress") { rows(active) } }
+                if !done.isEmpty { Section("Recently added") { rows(done) } }
+            }
+            .overlay {
+                if loaded && model.activity.isEmpty {
+                    ContentUnavailableView("No activity", systemImage: "arrow.down.circle",
+                                           description: Text("Requests and downloads show up here."))
+                } else if !loaded {
+                    ProgressView()
+                }
+            }
+            .navigationTitle("Activity")
+            .refreshable { await model.loadActivity() }
+            .navigationDestination(for: ActivityItem.self) { TitleDetailView(type: $0.type, id: $0.id) }
+            .navigationDestination(for: MediaCard.self) { TitleDetailView(type: $0.type, id: $0.id, seed: $0) }
+            .task {
+                await model.loadActivity()
+                loaded = true
+            }
+            .onAppear { model.beginWatchingActivity() }
+            .onDisappear { model.endWatchingActivity() }
+        }
+    }
+
+    private func live(_ item: ActivityItem) -> MediaStatus { model.status(item.type, item.id, fallback: item.status) }
+
+    @ViewBuilder private func rows(_ items: [ActivityItem]) -> some View {
+        ForEach(items, id: \.key) { item in
+            NavigationLink(value: item) { ActivityRow(item: item, status: live(item)) }
+        }
+    }
+}
+
+struct ActivityRow: View {
+    @Environment(AppModel.self) private var model
+    let item: ActivityItem
+    let status: MediaStatus
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RemoteImage(url: item.posterURL, maxPixel: 200)
+                .frame(width: 48, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(item.title ?? "Untitled").font(.headline).lineLimit(1)
+                    if let y = item.year { Text(String(y)).foregroundStyle(.secondary) }
+                }
+                StatusLine(status: status)
+                if status.state == .failed {
+                    if let m = status.message { Text(m).font(.caption).foregroundStyle(.red).lineLimit(3) }
+                    Button("Retry", systemImage: "arrow.clockwise") {
+                        Task { await model.retry(item.type, id: item.id) }
+                    }
+                    .buttonStyle(.bordered).tint(.red).controlSize(.small)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}

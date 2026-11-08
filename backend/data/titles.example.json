@@ -1,0 +1,5 @@
+{
+  "_readme": "Optional. TMDB IDs (movies) and TVDB IDs (series) you want to browse in the app, for example everything your sources carry. IDs only: titles, posters and metadata come from Radarr/Sonarr. Discovery also shows your Radarr import lists and recommendations, and search finds anything Radarr/Sonarr can look up. Edits apply without a restart.",
+  "movies": [10331, 653, 961, 3085, 4808],
+  "series": [70001]
+}

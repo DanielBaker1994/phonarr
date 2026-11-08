@@ -1,0 +1,16 @@
+{
+  "name": "Phonarr",
+  "short_name": "Phonarr",
+  "description": "Discover films and TV and add them to Radarr and Sonarr in one tap.",
+  "start_url": "./#/discover",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121214",
+  "theme_color": "#121214",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

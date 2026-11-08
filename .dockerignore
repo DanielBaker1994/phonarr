@@ -1,0 +1,8 @@
+# Build context is the repo root (see backend/Dockerfile). Only backend/app, backend/requirements.txt and web/ are used.
+*
+!backend/requirements.txt
+!backend/app/
+!web/
+**/__pycache__
+**/*.pyc
+web/tests/

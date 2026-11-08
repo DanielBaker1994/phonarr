@@ -1,0 +1,15 @@
+{
+  "logging": {
+    "storage_prefix": "ayr.log.",
+    "retention_days": 7,
+    "max_chars_per_day": 131072,
+    "min_secret_length": 6,
+    "store_debug": false,
+    "recent_problems": 20
+  },
+  "api": {
+    "log_body_chars": 300,
+    "timeout_ms": 20000,
+    "long_timeout_ms": 120000
+  }
+}

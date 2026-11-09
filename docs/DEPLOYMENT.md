@@ -33,15 +33,17 @@ What runs where, in one sentence: everything server-side (the API, polling Radar
 
 The web app has **no build step**: the files in `web/` are what the browser loads. "Building" the web target means building the Docker image, which copies `web/` in next to the gateway (`backend/Dockerfile`, build context = repo root).
 
-Gateway state lives in the `/data` volume:
+Gateway state lives in the data folder (`/app/data` in the image, bind-mounted from the host; `backend/data` in a checkout). Paths come from `storage` in `backend/app/config/settings.json`, and the gateway refuses to start if one points outside the folder. Moving it to another machine: README "Moving to another machine".
 - `gateway.sqlite3`: Arr URLs and API keys, defaults, request records, metadata cache.
-- `titles.json` (optional): TMDB/TVDB IDs to show in discovery, IDs only (see `backend/data/titles.example.json`). Override the path with `TITLES_FILE`.
-- `logs/`: redacted logs, all in this one folder, rolled daily and kept 14 days (`logging.retention_days`).
-  - `gateway.log` is the **main file to tail** (`tail -f backend/data/logs/gateway.log`): every line from every module. Each line shows the request id, module, function and line number, e.g. `… WARNING [web-3f2a9c1e] gateway.request_log:235: POST /v1/requests -> 502 in 812ms`. `[-]` means the line didn't come from an API call (poller, startup).
+- `titles.json` (optional): TMDB/TVDB IDs to show in discovery, IDs only (see `backend/examples/titles.example.json`). Override the path with `TITLES_FILE`.
+- `access_token`: only written if neither `ARR_GATEWAY_TOKEN` nor `ARR_GATEWAY_TOKEN_FILE` is set. A secret, so exports skip it and imports keep the one already there.
+
+Logs are rebuildable output and live apart from the data, in `cache/logs` (`/app/cache/logs` in the image, `backend/cache/logs` in a checkout):
+- redacted logs, all in this one folder, rolled daily and kept 14 days (`logging.retention_days`).
+  - `gateway.log` is the **main file to tail** (`tail -f backend/cache/logs/gateway.log`, or `docker compose exec phonarr tail -f /app/cache/logs/gateway.log`): every line from every module. Each line shows the request id, module, function and line number, e.g. `… WARNING [web-3f2a9c1e] gateway.request_log:235: POST /v1/requests -> 502 in 812ms`. `[-]` means the line didn't come from an API call (poller, startup).
   - `arr.log`, `compat.log`, `sources.log` hold only that logic's lines, for when the main file is too busy.
   - At midnight a file is renamed with the date: `gateway-20261107.log`. Which areas get their own file is the `logging.area_files` setting.
   - Functions with many exit points (requests, retries, refresh) are wrapped in `@traced`, which logs one entry line and one exit line with the duration at `DEBUG` (set `LOG_LEVEL=DEBUG`).
-- `access_token`: only written if neither `ARR_GATEWAY_TOKEN` nor `ARR_GATEWAY_TOKEN_FILE` is set.
 
 What the log tells you without turning on DEBUG: one `Phonarr <version> starting: …` line per start (data folder, token source, which servers are connected, timezone); one line per API call from a frontend (`[req id] METHOD /v1/... -> status in ms`, polls only at DEBUG); every failed Radarr/Sonarr call **with its reason** (DNS, refused, timeout, TLS, the app's own error text); `Radarr is DOWN: <reason>` when a server stops answering, a reminder every hour while it stays down, and `Radarr is back UP (was down N min)`; every failed request with the title and reason; and any unexpected error with its full traceback and request id. Successful Radarr/Sonarr calls are logged at DEBUG, slow ones (over `arr.slow_ms`, 3 s) at WARNING.
 
@@ -94,14 +96,15 @@ The image version (`APP_VERSION`, shown in `/v1/health` and System status) comes
 |---|---|---|
 | `ARR_GATEWAY_TOKEN` | (required) | Bearer token every frontend must send. Rotating it signs every frontend out; each asks for the new one. |
 | `ARR_GATEWAY_TOKEN_FILE`, `RADARR_API_KEY_FILE`, `SONARR_API_KEY_FILE` | unset | Read the value from a file instead (compose/Docker secrets, e.g. `/run/secrets/arr_token`). The plain variable wins if both are set. With a secret, drop the `${ARR_GATEWAY_TOKEN:?…}` line from the compose block. |
-| `PUID` / `PGID` | `1000` / `1000` | The user the gateway runs as and who owns `/data`. Use the same values as your Arr containers (`id -u`, `id -g` on the host). |
+| `PUID` / `PGID` | `1000` / `1000` | The user the gateway runs as and who owns the data folder. Use the same values as your Arr containers (`id -u`, `id -g` on the host). |
 | `TZ` | `Etc/UTC` | Timezone for log timestamps and the midnight log roll, e.g. `Europe/London`. |
 | `ARR_NETWORK` | `arr` | Standalone compose only: the external Docker network shared with Radarr and Sonarr. |
 | `LOG_LEVEL` | `INFO` | Use `DEBUG` for more detail: every Radarr/Sonarr call, status polls and entry/exit lines. |
 | `IDLE_HEALTH_CHECK` | `300` | Seconds between the cheap reachability checks made when no frontend is open and nothing is downloading, so `/v1/health` stays current. `0` turns them off. |
 | `BATCH_MAX` | `100` | Most titles in one multi-select request. |
 | `ARR_TIMEOUT` | `15` | Seconds to wait for Radarr or Sonarr. |
-| `DATA_DIR` | `/data` | Where the database, logs and `titles.json` live. |
+| `DATA_DIR` | `/app/data` | Moves the whole data folder (database, `titles.json`). Normally leave it and change the bind mount instead. |
+| `OUTPUT_DIR` | `/app/cache` | Moves the rebuildable output folder (logs). |
 | `TITLES_FILE` | `$DATA_DIR/titles.json` | The optional titles list. |
 | `ARR_SPEC_URL_RADARR` / `ARR_SPEC_URL_SONARR` | upstream GitHub | OpenAPI spec used by the API check (§5.4). |
 | `CONFIG_DIR` | none | Folder with `settings.json` and/or `messages.json` that override the built-in ones key by key (see Configuration below). |
@@ -125,7 +128,7 @@ The image version (`APP_VERSION`, shown in `/v1/health` and System status) comes
 About the simulated servers (`app/devfake.py`):
 - Auto-connects to the in-memory `http://radarr.test` and `http://sonarr.test`.
 - Each request starts a simulated download that advances about 8% per poll, goes through "importing", then completes. **His Girl Friday (TMDB 3085)** always fails partway, so you can try the failure and Retry flow. A retry then succeeds.
-- Discovery shows `backend/data/titles.example.json` plus a fake Radarr Discover feed (four recommendations). Search for "matrix" to see a search-only result. Movies need a default quality profile first (two exist), so the first + opens Customize Request, which is also how that path is tested.
+- Discovery shows `backend/examples/titles.example.json` plus a fake Radarr Discover feed (four recommendations). Search for "matrix" to see a search-only result. Movies need a default quality profile first (two exist), so the first + opens Customize Request, which is also how that path is tested.
 - Posters point at made-up URLs, so you see placeholders.
 - It logs a loud warning and is off unless `DEV_FAKE_ARR=1`. **Never set it on the real server.** The brief forbids simulated progress in the product, and this exists only for UI work.
 
@@ -168,11 +171,11 @@ Not supported yet, with the workaround where there is one:
 | Serving under a sub-path (`https://host/phonarr/`) behind a reverse proxy | The web app, console and service worker use absolute `/v1` and `/` paths. Give it its own port, its own subdomain (`phonarr.example.com`), or `tailscale serve` (§3.2) |
 | More than one Radarr or Sonarr (e.g. a 4K instance) | One of each (EDGE_CASES.md) |
 | More than one gateway container, or uvicorn `--workers` > 1 | Polling state is in memory and SQLite is single-writer. Run exactly one container with the default single worker |
-| `/data` on NFS or SMB | SQLite in WAL mode isn't safe on network filesystems. Keep `/data` on a local disk; back it up by copying the folder while the container is stopped |
+| The data folder on NFS or SMB | SQLite in WAL mode isn't safe on network filesystems. Keep it on a local disk; back it up by copying the folder while the container is stopped, or with `phonarr export-data` while it runs |
 | `armv7` (32-bit Raspberry Pi OS) | Only `amd64` and `arm64` images are built. A 64-bit OS on the Pi works |
 | Radarr/Sonarr behind a VPN container (`network_mode: service:gluetun`) | Works, but their address is the VPN container's name: `http://gluetun:7878` |
 | Rootless Docker or Podman | Untested. Use `user: "<uid>:<gid>"` and make sure that user owns the folder |
-| Read-only root filesystem (`read_only: true`) | Untested. The gateway only writes to `/data`, so it should work |
+| Read-only root filesystem (`read_only: true`) | Untested. The gateway writes only to `/app/data` and `/app/cache` (mount both), so it should work |
 | Changing `RADARR_URL` / `SONARR_URL` after the first start | The saved connection wins; the log says so. Change it in Settings, or remove the connection to re-seed from the environment |
 | Separate users or permissions | One shared token (`ARR_GATEWAY_TOKEN`) |
 
@@ -281,7 +284,7 @@ It goes out through the iOS share sheet (AirDrop, Mail, Messages, Save to Files)
 
 **Redaction:** Arr API keys and the gateway token are registered as secrets and replaced with `***` in every log line, in the gateway and on the phone. `apikey=`, `X-Api-Key:` and `Bearer …` patterns are also masked. Tests check this (`test_debug_bundle_is_redacted`).
 
-**Server side directly:** `docker logs phonarr`, `backend/data/logs/gateway.log`, or `curl -H "$H" …/v1/debug/bundle -o x.zip`.
+**Server side directly:** `docker logs phonarr`, `cache/logs/gateway.log`, or `curl -H "$H" …/v1/debug/bundle -o x.zip`.
 
 **Following one call through all the logs:** every API call carries a request id. The frontends make one (`web-…` / `ios-…`), send it as `X-Request-Id`, and log it as `[req web-3f2a9c1e]`; the gateway puts the same id on every log line that call causes and returns it in every error (`"request_id"`). An unexpected gateway error tells the user its id, so `grep web-3f2a9c1e gateway.log` finds the traceback.
 
@@ -291,7 +294,7 @@ It goes out through the iOS share sheet (AirDrop, Mail, Messages, Save to Files)
 
 | Symptom | Likely cause | Where to look |
 |---|---|---|
-| Container restarts in a loop; `docker logs` says "The data folder /data is not writable by uid …" | You run it with `user:` and that user doesn't own the folder | `sudo chown -R <uid>:<gid> ./phonarr`, or drop `user:` and set `PUID`/`PGID` instead (§2.1) |
+| Container restarts in a loop; `docker logs` says "The data folder /app/data is not writable by uid …" | You run it with `user:` and that user doesn't own the folder | `sudo chown -R <uid>:<gid> ./phonarr`, or drop `user:` and set `PUID`/`PGID` instead (§2.1) |
 | `./build-web.sh` says "Docker network 'arr' … doesn't exist" | `ARR_NETWORK` in `backend/.env` doesn't match your Arr network | `docker network ls`; `docker inspect radarr` shows its network |
 | "Could not resolve radarr:7878 … looks like a Docker service name" | Radarr is stopped (a stopped container's name stops resolving), named differently, or on another network | `docker ps`; check `networks:` for both services |
 | "Inside Docker, localhost means the Phonarr container itself" | `http://localhost:7878` was entered for Radarr | Use `http://radarr:7878` or the server's LAN address |

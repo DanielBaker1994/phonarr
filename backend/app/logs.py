@@ -1,4 +1,4 @@
-"""Logging setup: console + rotating file in DATA_DIR/logs, with secret redaction.
+"""Logging setup: console + daily files in the output folder (storage.output_paths.logs), with secret redaction.
 
 Every Arr API key and the gateway token are registered as secrets and masked in
 every log line, so log files and debug bundles are safe to share.
@@ -14,7 +14,7 @@ import re
 import time
 from pathlib import Path
 
-from .config import cfg, msg
+from .config import cfg, msg, output_path
 
 _SECRETS: set[str] = set()
 
@@ -51,8 +51,9 @@ class RedactingFormatter(logging.Formatter):
         return redact(super().format(record))
 
 
-def log_dir(data_dir: Path) -> Path:
-    d = data_dir / cfg("logging.dir_name")
+def log_dir(base: Path | None = None) -> Path:
+    """The logs folder: rebuildable output, never in the data folder or an export."""
+    d = output_path("logs", base)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -139,7 +140,7 @@ def _daily_handler(path: Path, fmt: logging.Formatter) -> logging.Handler:
     return handler
 
 
-def setup_logging(data_dir: Path, level: str | None = None) -> None:
+def setup_logging(base: Path | None = None, level: str | None = None) -> None:
     fmt = RedactingFormatter(cfg("logging.format"))
     root = logging.getLogger()
     root.setLevel(level or cfg("logging.level"))
@@ -152,13 +153,13 @@ def setup_logging(data_dir: Path, level: str | None = None) -> None:
     console.addFilter(RequestIdFilter())
     root.addHandler(console)
     # Main file to tail: every record from every module. Area files hold one module's logic only.
-    root.addHandler(_daily_handler(log_dir(data_dir) / cfg("logging.main_file"), fmt))
+    root.addHandler(_daily_handler(log_dir(base) / cfg("logging.main_file"), fmt))
     for area, file_name in cfg("logging.area_files").items():
         lg = logging.getLogger(area)
         for h in [h for h in lg.handlers if isinstance(h, logging.handlers.TimedRotatingFileHandler)]:
             lg.removeHandler(h)
             h.close()
-        lg.addHandler(_daily_handler(log_dir(data_dir) / file_name, fmt))   # still propagates to the main file
+        lg.addHandler(_daily_handler(log_dir(base) / file_name, fmt))   # still propagates to the main file
     # uvicorn's own loggers go through the root handlers too
     for name in ("uvicorn", "uvicorn.error"):
         logging.getLogger(name).handlers = []

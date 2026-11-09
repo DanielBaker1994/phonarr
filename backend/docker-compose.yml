@@ -3,6 +3,15 @@
 # Already have one big compose file for your Arr stack? Paste backend/compose-entry.yml into it instead,
 # which pulls the prebuilt image from GitHub (ghcr.io) rather than building here.
 # Joins the Docker network your Radarr/Sonarr already use, so they're reachable as http://radarr:7878 and http://sonarr:8989.
+#
+# What lives where (README "Moving to another machine"):
+#   backend/data/   everything to keep (database, titles.json). Bind-mounted: moving machines = copying this folder.
+#   cache volume    logs and other rebuildable output. Safe to delete.
+#   backend/.env    secrets (ARR_GATEWAY_TOKEN, optional *_API_KEY). Read by compose on the host, passed in as
+#                   environment variables; never mounted, never in the image, never in an export.
+# Export / import the data folder as one .zip (run from the repo root; stop the app before an import):
+#   docker compose -f backend/docker-compose.yml exec -T phonarr phonarr export-data - > data.zip
+#   docker compose -f backend/docker-compose.yml run --rm -T phonarr phonarr import-data --replace - < data.zip
 services:
   phonarr:
     image: phonarr:local
@@ -19,15 +28,15 @@ services:
       PGID: ${PGID:-1000}
       TZ: ${TZ:-Etc/UTC}
       LOG_LEVEL: INFO
-      # Optional list of TMDB/TVDB IDs to browse (default /data/titles.json):
-      # TITLES_FILE: /data/titles.json
+      # Optional list of TMDB/TVDB IDs to browse: put it at backend/data/titles.json.
       # Optional: preconfigure instead of using the setup screens.
       # RADARR_URL: http://radarr:7878
       # RADARR_API_KEY: ...
       # SONARR_URL: http://sonarr:8989
       # SONARR_API_KEY: ...
     volumes:
-      - ./data:/data
+      - ./data:/app/data             # everything to keep; copy this folder to move machines
+      - cache:/app/cache             # logs (rebuildable); docker volume rm backend_cache is harmless
     ports:
       - "8787:8787"                  # web app at http://<host>:8787/, API at /v1, API console at /console/
     logging:
@@ -37,6 +46,9 @@ services:
         max-file: "3"
     networks:
       - arr
+
+volumes:
+  cache:
 
 networks:
   arr:

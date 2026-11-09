@@ -2,14 +2,14 @@
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s %(levelname)s [%(request_id)s] %(name)s.%(funcName)s:%(lineno)d: %(message)s",
-    "dir_name": "logs",
     "main_file": "gateway.log",
     "date_format": "%Y%m%d",
     "retention_days": 14,
     "area_files": {
       "arr": "arr.log",
       "compat": "compat.log",
-      "sources": "sources.log"
+      "sources": "sources.log",
+      "datafiles": "datafiles.log"
     },
     "trace_level": "DEBUG",
     "quiet_loggers": [
@@ -22,6 +22,48 @@
       "/v1/health"
     ],
     "slow_request_ms": 5000
+  },
+  "storage": {
+    "data_dir": "data",
+    "data_dir_env": "DATA_DIR",
+    "output_dir": "cache",
+    "output_dir_env": "OUTPUT_DIR",
+    "data_files": {
+      "database": "gateway.sqlite3",
+      "titles": "titles.json",
+      "access_token": "access_token"
+    },
+    "output_paths": {
+      "logs": "logs"
+    },
+    "secret_files": [
+      "access_token"
+    ],
+    "ignored_files": [
+      ".write-test"
+    ],
+    "legacy_data_dirs": [
+      "/data"
+    ]
+  },
+  "export": {
+    "format": "phonarr-data",
+    "version": 1,
+    "manifest": "manifest.json",
+    "folder": "data",
+    "skip_suffixes": [
+      "-wal",
+      "-shm",
+      "-journal"
+    ],
+    "sqlite_header": "SQLite format 3",
+    "staging_prefix": ".import-staging-",
+    "chunk_bytes": 1048576,
+    "scrub": {
+      "database": [
+        "DELETE FROM service_config"
+      ]
+    }
   },
   "gateway": {
     "batch_max": 100,

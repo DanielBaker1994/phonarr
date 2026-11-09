@@ -25,7 +25,7 @@ def fake():
 @pytest.fixture
 def client(tmp_path, fake):
     (tmp_path / "titles.json").write_text(json.dumps(TITLES))
-    app = create_app(data_dir=tmp_path, transport=fake.transport(), run_poller=False, token=TOKEN)
+    app = create_app(data_dir=tmp_path, transport=fake.transport(), run_poller=False, token=TOKEN, output_dir=tmp_path)
     with TestClient(app) as c:
         yield c
 
@@ -964,3 +964,184 @@ def test_secrets_can_come_from_files(tmp_path, monkeypatch):
     assert env_or_file("ARR_GATEWAY_TOKEN") == "plain"          # the plain variable wins
     monkeypatch.setenv("RADARR_API_KEY_FILE", str(tmp_path / "missing"))
     assert env_or_file("RADARR_API_KEY") == ""
+
+
+# ------------------------------------------------------------------ moving the data folder
+def _export_zip(data, tmp_path, name="data.zip"):
+    from app.datafiles import export_data
+    out = tmp_path / name
+    with out.open("wb") as f:
+        export_data(f, data)
+    return out
+
+
+def test_export_imports_into_another_project_and_reads_back_the_same(tmp_path, fake):
+    import zipfile
+
+    from app.datafiles import import_data
+    from app.db import Database
+    a, b = tmp_path / "a" / "data", tmp_path / "b" / "data"
+    a.mkdir(parents=True)
+    (a / "titles.json").write_text(json.dumps(TITLES))
+    (a / "photos").mkdir()
+    (a / "photos" / "p.jpg").write_bytes(bytes(range(256)) * 10)
+    (a / "access_token").write_text("secret-token-a")
+    with TestClient(create_app(a, fake.transport(), False, TOKEN, output_dir=tmp_path / "a" / "cache")) as c:
+        configure(c)
+        assert c.post("/v1/requests", json={"type": "movie", "id": 10331}, headers=AUTH).status_code == 200
+    src = Database(a / "gateway.sqlite3")
+    zip_path = _export_zip(a, tmp_path)
+    names = zipfile.ZipFile(zip_path).namelist()
+    assert "manifest.json" in names and "data/gateway.sqlite3" in names and "data/photos/p.jpg" in names
+    assert not any(n.endswith(("-wal", "-shm", "access_token")) for n in names)          # secrets and WAL stay out
+    blob = b"".join(zipfile.ZipFile(zip_path).read(n) for n in names)
+    assert b"radarr0123456789abcdef" not in blob and b"secret-token-a" not in blob        # no API keys either
+
+    b.mkdir(parents=True)
+    (b / "access_token").write_text("secret-token-b")       # the new machine's own secret is kept
+    import_data(zip_path, b)
+    dst = Database(b / "gateway.sqlite3")
+    assert dst.list_requests() == src.list_requests() and dst.list_requests()
+    assert dst.get_setting("defaults") == src.get_setting("defaults")
+    assert dst.get_service("radarr") is None                 # reconnect with the key from .env or Settings
+    assert (b / "titles.json").read_text() == (a / "titles.json").read_text()
+    assert (b / "photos" / "p.jpg").read_bytes() == (a / "photos" / "p.jpg").read_bytes()
+    assert (b / "access_token").read_text() == "secret-token-b"
+    assert not [p for p in b.iterdir() if p.name.startswith(".import-staging-")]
+
+
+def test_export_is_consistent_while_a_connection_writes(tmp_path):
+    import io
+    import sqlite3
+    import threading
+    import zipfile
+
+    from app.datafiles import export_data
+    data = tmp_path / "data"
+    data.mkdir()
+    conn = sqlite3.connect(str(data / "notes.db"), check_same_thread=False, isolation_level=None)   # any SQLite file
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("CREATE TABLE t (n INTEGER)")
+    stop = threading.Event()
+
+    def writer():
+        while not stop.is_set():                              # two rows per transaction: a torn copy shows an odd count
+            conn.execute("BEGIN")
+            conn.execute("INSERT INTO t VALUES (1)")
+            conn.execute("INSERT INTO t VALUES (2)")
+            conn.execute("COMMIT")
+
+    t = threading.Thread(target=writer)
+    t.start()
+    try:
+        for _ in range(5):
+            buf = io.BytesIO()
+            export_data(buf, data)
+            copy = tmp_path / "copy.sqlite3"
+            copy.write_bytes(zipfile.ZipFile(buf).read("data/notes.db"))
+            check = sqlite3.connect(str(copy))
+            assert check.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            assert check.execute("SELECT COUNT(*) FROM t").fetchone()[0] % 2 == 0
+            check.close()
+    finally:
+        stop.set()
+        t.join()
+        conn.close()
+
+
+def test_import_refuses_a_folder_with_data_unless_replace(tmp_path):
+    from app.datafiles import DataFileError, import_data
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    (a / "titles.json").write_text("new")
+    zip_path = _export_zip(a, tmp_path)
+    (b / "titles.json").write_text("old")
+    (b / "stale.txt").write_text("gone after replace")
+    with pytest.raises(DataFileError, match="--replace"):
+        import_data(zip_path, b)
+    assert (b / "titles.json").read_text() == "old"
+    import_data(zip_path, b, replace=True)
+    assert (b / "titles.json").read_text() == "new" and not (b / "stale.txt").exists()
+
+
+def test_import_rejects_damaged_foreign_and_unsafe_files(tmp_path):
+    import zipfile
+
+    from app.datafiles import DataFileError, import_data
+    a = tmp_path / "a"
+    a.mkdir()
+    (a / "titles.json").write_text("[1, 2, 3]")
+    good = zipfile.ZipFile(_export_zip(a, tmp_path))
+    manifest = json.loads(good.read("manifest.json"))
+
+    def build(name, entries):
+        p = tmp_path / name
+        with zipfile.ZipFile(p, "w") as z:
+            for n, body in entries.items():
+                z.writestr(n, body)
+        return p
+
+    def unsafe(path):
+        m = dict(manifest, files=[{"path": path, "size": 3, "sha256": "0" * 64}])
+        return build(f"unsafe{abs(hash(path))}.zip", {"manifest.json": json.dumps(m), f"data/{path}": "bad"})
+
+    cases = {
+        "not a Phonarr data export": tmp_path / "plain.txt",
+        "no manifest": build("nomanifest.zip", {"data/titles.json": "[1, 2, 3]"}),
+        "not a \"phonarr-data\"": build("foreign.zip", {"manifest.json": json.dumps(dict(manifest, format="other")),
+                                                       "data/titles.json": "[1, 2, 3]"}),
+        "damaged": build("damaged.zip", {"manifest.json": json.dumps(manifest), "data/titles.json": "[9, 9, 9]"}),
+        "doesn't list": build("extra.zip", {"manifest.json": json.dumps(manifest), "data/titles.json": "[1, 2, 3]",
+                                            "data/extra.txt": "x"}),
+        "is missing": build("missing.zip", {"manifest.json": json.dumps(manifest)}),
+    }
+    (tmp_path / "plain.txt").write_text("hello")
+    for i, path in enumerate(["../escape.txt", "/etc/passwd", "a/../../b"]):
+        cases[f"unsafe path{' ' * i}"] = unsafe(path)
+    target = tmp_path / "target"
+    target.mkdir()
+    for expected, src in cases.items():
+        with pytest.raises(DataFileError, match=expected.strip()):
+            import_data(src, target)
+        assert list(target.iterdir()) == []                  # nothing written, no staging left behind
+
+
+def test_config_path_outside_data_folder_is_a_config_error(tmp_path, monkeypatch):
+    from app import config
+    for bad in ("../elsewhere.sqlite3", "/var/lib/gateway.sqlite3", ""):
+        (tmp_path / "settings.json").write_text(json.dumps({"storage": {"data_files": {"database": bad}}}))
+        monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+        config.reload()
+        try:
+            with pytest.raises(config.ConfigError) as e:
+                config.check_paths()
+            assert "settings.json" in str(e.value) and str(tmp_path) in str(e.value)
+            assert "storage.data_files.database" in str(e.value)
+        finally:
+            monkeypatch.delenv("CONFIG_DIR")
+            config.reload()
+    config.check_paths()                                      # the shipped settings are fine
+    monkeypatch.setenv("OUTPUT_DIR", str(config.data_dir() / "cache"))
+    with pytest.raises(config.ConfigError, match="separate"):
+        config.check_paths()
+
+
+def test_cli_streams_export_and_import(tmp_path, monkeypatch, capsysbinary):
+    import io
+    import sys
+
+    from app.__main__ import main
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    (a / "titles.json").write_text("[1]")
+    monkeypatch.setenv("DATA_DIR", str(a))
+    assert main(["export-data", "-"]) == 0
+    zipped = capsysbinary.readouterr().out
+    assert zipped[:2] == b"PK"
+    monkeypatch.setenv("DATA_DIR", str(b))
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(zipped)))
+    assert main(["import-data", "-"]) == 0
+    assert (b / "titles.json").read_text() == "[1]"
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(zipped)))
+    assert main(["import-data", "-"]) == 1                   # now has data: needs --replace

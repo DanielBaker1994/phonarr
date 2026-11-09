@@ -15,7 +15,10 @@
     "internal": "Something went wrong in the gateway (request {request_id}). The gateway log has the details: Settings → Troubleshooting → Download debug report.",
     "validation": "Invalid request: {details}",
     "not_found_path": "Not found.",
-    "data_not_writable": "The data folder {path} is not writable by uid {uid}. Fix it on the host with: sudo chown -R {uid}:{gid} <the folder mounted at {path}>, or set PUID/PGID to the folder's owner. ({error})"
+    "data_not_writable": "The data folder {path} is not writable by uid {uid}. Fix it on the host with: sudo chown -R {uid}:{gid} <the folder mounted at {path}>, or set PUID/PGID to the folder's owner. ({error})",
+    "config_path_outside": "Config error in {file}: {setting} is \"{value}\", which is not inside the {folder} folder. Use a relative path with no \"..\", e.g. \"name.ext\".",
+    "config_folders_overlap": "Config error in {file}: the data folder ({data}) and the output folder ({output}) must be separate, neither inside the other, so exports never pick up logs.",
+    "legacy_data": "Found Phonarr data in the old location {old}, but the gateway now keeps its data in {new}. Change the volume line to mount the same host folder at {new} (e.g. ./phonarr:{new}) and start again. Nothing was changed."
   },
   "arr": {
     "not_configured": "{name} is not configured yet. Add it in Settings.",
@@ -84,5 +87,23 @@
   "compat": {
     "server_error": "The server answered with its own error (HTTP {status}), so fields couldn't be checked: {message}. This is usually not an API change; check System → Status in that app.",
     "http_status": "HTTP {status}. {message}"
+  },
+  "datafiles": {
+    "exported": "Exported {files} files ({bytes} bytes) from {data} to {dest}",
+    "imported": "Imported {files} files ({bytes} bytes) into {data}",
+    "not_zip": "{src} is not a Phonarr data export (not a zip file).",
+    "no_manifest": "{src} is not a Phonarr data export: it has no {manifest}.",
+    "bad_manifest": "{src} has an unreadable manifest: {error}",
+    "wrong_format": "{src} is a \"{found}\" file, not a \"{format}\" export.",
+    "too_new": "{src} is export version {found}; this version of Phonarr reads up to version {version}. Update Phonarr first.",
+    "unsafe_path": "{src} contains an unsafe path \"{path}\" (absolute, \"..\" or outside the data folder). Nothing was imported.",
+    "unlisted": "{src} contains \"{path}\", which the manifest doesn't list. Nothing was imported.",
+    "missing": "{src} is missing \"{path}\", which the manifest lists. Nothing was imported.",
+    "damaged": "{src} is damaged: \"{path}\" doesn't match its checksum or size. Nothing was imported.",
+    "not_empty": "The data folder {data} already has data ({example}). Run again with --replace to replace it (stop the app first). Nothing was changed.",
+    "usage_export": "Write the whole data folder to one .zip (FILE, or - for stdout)",
+    "usage_import": "Replace the data folder with an export (FILE, or - for stdin)",
+    "usage_replace": "allow replacing a data folder that already has data",
+    "failed": "{action} failed: {error}"
   }
 }

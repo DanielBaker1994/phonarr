@@ -23,7 +23,7 @@ There is one **backend** and two **frontends**. The backend is the only thing th
   home screen app)  │    /v1/*       gateway API (backend/, FastAPI)        ◀── bearer token │──X-Api-Key──▶ Sonarr
                     │    /console/   API console (test every endpoint with curl)           │
  iPhone app ───────▶│    /v1/health  is it up? (Docker healthcheck, no token)              │
- (SwiftUI, ios/)    │    SQLite in /data: keys, defaults, requests, metadata cache         │
+ (SwiftUI, ios/)    │    SQLite in data/: keys, defaults, requests, metadata cache         │
                     └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,7 +68,7 @@ On first launch enter the gateway address (`http://100.x.y.z:8787`) and token. S
 ## Is it up? Testing the API by hand
 
 - **`http://<server>:8787/v1/health`** needs no token. `"ok": true` means the gateway is serving; `"status"` is `ok`, `degraded` (Radarr or Sonarr unreachable, or the poller stopped) or `setup` (none connected). It stays current even with no app open. Docker's healthcheck uses it, so `docker compose ps` shows `healthy`. Point Uptime Kuma or similar at it if you like.
-- **Logs:** `backend/data/logs/gateway.log` (or `docker compose logs phonarr`). Outages are logged with their reason (`Radarr is DOWN: …`, `Radarr is back UP`), and every line carries a request id that the apps also show and log, so one id finds a call everywhere. Details: [docs/DEPLOYMENT.md §5.1](docs/DEPLOYMENT.md).
+- **Logs:** `docker compose logs phonarr`, or the files in `cache/logs/` (`backend/cache/logs/gateway.log` when run from a checkout). Outages are logged with their reason (`Radarr is DOWN: …`, `Radarr is back UP`), and every line carries a request id that the apps also show and log, so one id finds a call everywhere. Details: [docs/DEPLOYMENT.md §5.1](docs/DEPLOYMENT.md).
 - **Settings → System status** in both frontends shows the same thing with details.
 - **`http://<server>:8787/console/`** is the API console: every endpoint with an editable, copy-and-paste `curl` command, a **Test** button that shows the response, and a button that tests every read-only endpoint at once. One file: [`web/console/index.html`](web/console/index.html).
 - `http://<server>:8787/docs` is FastAPI's Swagger page, if you prefer that.
@@ -78,7 +78,7 @@ On first launch enter the gateway address (`http://100.x.y.z:8787`) and token. S
 Every title can be requested; there is nothing to mark or approve. Discover, Movies and TV Shows show, merged and de-duplicated:
 
 1. **Radarr Discover**: your Radarr import lists plus Radarr's recommendations (`GET /api/v3/importlist/movie?includeRecommendations=true`).
-2. **Your titles list** (optional): `titles.json` in the data folder with TMDB IDs for films and TVDB IDs for shows. IDs only; titles, posters and metadata come from Radarr and Sonarr. It's reloaded when it changes. See `backend/data/titles.example.json`:
+2. **Your titles list** (optional): `titles.json` in the data folder with TMDB IDs for films and TVDB IDs for shows. IDs only; titles, posters and metadata come from Radarr and Sonarr. It's reloaded when it changes. See `backend/examples/titles.example.json`:
    ```json
    { "movies": [10331, 653, {"tmdb_id": 961}], "series": [{"tvdb_id": 70001}] }
    ```
@@ -86,6 +86,30 @@ Every title can be requested; there is nothing to mark or approve. Discover, Mov
 4. **Your library**, when Settings → "Show titles already in library" is on.
 
 Sonarr has no Discover feed, so TV comes from the titles list and search.
+
+## Where things live
+
+| Kind | Where | Keep it? |
+|---|---|---|
+| **Data**: database (connections, defaults, requests), `titles.json`, anything else you add | `backend/data/` in a checkout, `/app/data` in the image (bind-mounted from `./data` or `./phonarr` on the host). Set by `storage` in `backend/app/config/settings.json`; `DATA_DIR` moves it | Yes. Never committed, never in the image |
+| **Rebuildable output**: logs | `backend/cache/` (`/app/cache` in the image, a named volume or inside the container) | Safe to delete |
+| **Secrets**: `ARR_GATEWAY_TOKEN`, optional `RADARR_API_KEY` / `SONARR_API_KEY` | `backend/.env` (or the `.env` next to your big compose file) | Never committed, never in the image or an export |
+
+## Moving to another machine
+
+Either **copy the folder**: stop the app, copy the data folder (`./phonarr` or `backend/data`) and the `.env` file to the new machine, start it there.
+
+Or **use one .zip** (safe while the app is running; run where the compose file is):
+
+```bash
+docker compose exec -T phonarr phonarr export-data - > data.zip         # old machine
+# copy data.zip and the .env to the new machine, then:
+docker compose stop phonarr
+docker compose run --rm -T phonarr phonarr import-data --replace - < data.zip
+docker compose start phonarr
+```
+
+From a checkout without Docker it is `cd backend && .venv/bin/python -m app export-data data.zip` and `… import-data data.zip --replace`. The zip has a manifest with a SHA-256 per file; import checks it all before touching anything and refuses a data folder that already has data unless you pass `--replace`. API keys are never exported, so on the new machine Radarr and Sonarr connect from `RADARR_*` / `SONARR_*` in `.env`, or you enter them once in Settings; defaults and request history come across. Upgrading an install whose compose file mounts `…:/data`: change it to `…:/app/data` (same host folder, nothing to copy); the gateway refuses to start until you do.
 
 ## Tests
 

@@ -32,5 +32,5 @@ async function loadJson(name) {
   } catch { return {}; }
 }
 
-const loaded = makeConfig(await loadJson("settings"), await loadJson("strings"));
+const loaded = makeConfig(...await Promise.all([loadJson("settings"), loadJson("strings")]));   // both at once: one round trip
 export const { cfg, text, hasText } = loaded;

@@ -18,7 +18,17 @@
 #
 # Update:   docker compose pull phonarr && docker compose up -d phonarr
 # Is it up? docker compose ps phonarr   (STATUS shows "healthy"), or open http://<host>:8787/v1/health
-# Logs:     docker compose logs -f phonarr   or   ./phonarr/logs/gateway.log on the host
+# Logs:     docker compose logs -f phonarr   (log files live inside the container: /app/cache/logs)
+#
+# What lives where: ./phonarr on the host is the data folder (everything to keep, nothing else).
+# Logs are rebuildable and stay in the container. Secrets (ARR_GATEWAY_TOKEN, *_API_KEY) stay in the .env
+# next to this compose file and reach the container as environment variables: never mounted, never exported.
+# Move to another machine: copy ./phonarr and the .env with the app stopped, or use one .zip:
+#   docker compose exec -T phonarr phonarr export-data - > data.zip
+#   docker compose stop phonarr && docker compose run --rm -T phonarr phonarr import-data --replace - < data.zip && docker compose start phonarr
+#
+# Upgrading from an image that used /data: change the volume line below from ./phonarr:/data to
+# ./phonarr:/app/data (same host folder, nothing to copy). The gateway refuses to start until you do.
 
 services:
   phonarr:
@@ -36,7 +46,7 @@ services:
       # SONARR_URL: http://sonarr:8989
       # SONARR_API_KEY: ${SONARR_API_KEY}
     volumes:
-      - ./phonarr:/data                 # gateway.sqlite3, logs/, optional titles.json. Created and chowned to PUID:PGID on start
+      - ./phonarr:/app/data             # the data folder: gateway.sqlite3, optional titles.json. Created and chowned to PUID:PGID on start
     ports:
       - "8787:8787"                         # web app /, API /v1, API console /console/, health /v1/health
     healthcheck:                            # same check as the image's HEALTHCHECK; repeated so it shows in this file

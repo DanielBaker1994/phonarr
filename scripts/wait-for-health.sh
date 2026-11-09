@@ -13,5 +13,5 @@ for _ in $(seq 1 30); do
 done
 echo "No answer from $url/v1/health after 60 s. Last container log lines:" >&2
 docker compose -f backend/docker-compose.yml logs --tail 30 phonarr >&2 || true
-echo "More: docker compose -f backend/docker-compose.yml logs phonarr, or backend/data/logs/gateway.log" >&2
+echo "More: docker compose -f backend/docker-compose.yml logs phonarr, or the files in /app/cache/logs inside the container" >&2
 exit 1

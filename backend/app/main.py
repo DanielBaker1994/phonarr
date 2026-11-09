@@ -28,7 +28,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from .arr import TIMINGS, ArrError
-from .config import cfg, msg
+from .config import ConfigError, cfg, check_paths, data_dir as config_data_dir, data_file, msg, output_dir as config_output_dir
 from .logs import REQUEST_ID, get_logger, log_dir, redact, register_secret, setup_logging
 from .db import Database
 from .discovery import SORTS
@@ -106,7 +106,7 @@ def _load_token(data_dir: Path) -> tuple[str, str]:
     token = env_or_file("ARR_GATEWAY_TOKEN")
     if token:
         return token, "env" if os.environ.get("ARR_GATEWAY_TOKEN", "").strip() else "file"
-    path = data_dir / "access_token"
+    path = data_file("access_token", data_dir)
     if path.exists():
         return path.read_text().strip(), str(path)
     token = secrets.token_urlsafe(32)
@@ -145,12 +145,13 @@ class WebFiles(StaticFiles):
 
 def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTransport | None = None,
                run_poller: bool | None = None, token: str | None = None,
-               web_dir: str | Path | None = None) -> FastAPI:
-    data_dir = Path(data_dir or os.environ.get("DATA_DIR", "/data"))
+               web_dir: str | Path | None = None, output_dir: str | Path | None = None) -> FastAPI:
+    data_dir = Path(data_dir or config_data_dir())
+    output_dir = Path(output_dir or config_output_dir())
     web_dir = Path(web_dir or os.environ.get("WEB_DIR") or REPO_WEB_DIR)
     data_dir.mkdir(parents=True, exist_ok=True)
-    db = Database(data_dir / "gateway.sqlite3")
-    titles = TitleList(os.environ.get("TITLES_FILE", data_dir / "titles.json"))
+    db = Database(data_file("database", data_dir))
+    titles = TitleList(os.environ.get("TITLES_FILE", data_file("titles", data_dir)))
     gateway = Gateway(db, titles, transport)
     access_token, token_source = (token, "argument") if token else _load_token(data_dir)
     register_secret(access_token)
@@ -160,7 +161,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         transport = FakeArr(simulate=True).transport()
         gateway.transport = transport
         log.warning(msg("log.dev_fake"))
-        example = Path(__file__).resolve().parent.parent / "data" / "titles.example.json"
+        example = Path(__file__).resolve().parent.parent / "examples" / "titles.example.json"
         if not titles.path.exists() and example.exists():
             titles.path = example
     if run_poller is None:
@@ -349,7 +350,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
             z.writestr("gateway/requests.json", redact(json.dumps(db.list_requests(), indent=2, default=str)))
             z.writestr("gateway/arr_call_timings.json", json.dumps(list(TIMINGS), indent=2))
             z.writestr("gateway/api_compat.json", redact(json.dumps(gateway.compat_reports(), indent=2, default=str)))
-            for f in sorted(log_dir(data_dir).glob("*.log*")):
+            for f in sorted(log_dir(output_dir).glob("*.log*")):
                 z.writestr(f"gateway/logs/{f.name}", redact(f.read_text(encoding="utf-8", errors="replace")))
             if client:
                 folder = "".join(ch for ch in client.name if ch.isalnum() or ch in "-_")[:32] or "client"
@@ -488,11 +489,16 @@ def check_data_dir(data_dir: Path) -> str | None:
 
 
 def _app_factory() -> FastAPI:
-    data_dir = Path(os.environ.get("DATA_DIR", "/data"))
-    problem = check_data_dir(data_dir)
+    data_dir = config_data_dir()
+    try:
+        check_paths()
+    except ConfigError as exc:
+        problem = str(exc)
+    else:
+        problem = check_data_dir(data_dir)
     if problem:
         # Logging can't write its files yet, so say it plainly on stderr (docker logs) and stop.
         print(problem, file=sys.stderr, flush=True)   # noqa: T201  the one place a logger can't be used
         raise SystemExit(1)
-    setup_logging(data_dir)
+    setup_logging()
     return create_app()

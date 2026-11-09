@@ -15,6 +15,10 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | Self-signed certificate on an Arr app | `ARR_VERIFY_TLS=0` | 🟢 |
 | Gateway token rotated | The app signs out to pairing, keeps the address, and explains why | 🟢 |
 | Phone offline or gateway down | Cached catalogue and statuses stay visible, an offline banner shows, and polling retries every 15 s | 🟢 |
+| Move the install to another machine | Copy the data folder plus `.env`, or `phonarr export-data` / `import-data`. Export is a consistent SQLite backup while running, without API keys or the token | ✅ `test_export_imports_into_another_project…`, `test_export_is_consistent…` |
+| Import over existing data, or a damaged, foreign or unsafe zip | Refused without `--replace`; manifest, checksums and paths are checked before anything is written | ✅ `test_import_refuses…`, `test_import_rejects…` |
+| A data path in settings.json outside the data folder | Startup and the CLI stop with the file and key | ✅ `test_config_path_outside_data_folder…` |
+| Old compose file still mounts `/data` | The container stops and says to change the mount to `/app/data` | 🟢 |
 
 ## Requests
 | Case | Behaviour | |

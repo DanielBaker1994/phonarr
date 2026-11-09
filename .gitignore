@@ -1,10 +1,11 @@
-# Local secrets and state (never commit)
+# Secrets (never commit)
 backend/.env
-backend/data/gateway.sqlite3*
-backend/data/access_token
-backend/data/logs/
-backend/data/titles.json
+# Data folder: everything the user made (never commit; see README "Moving to another machine")
+backend/data/
 backend/devdata/
+data.zip
+# Rebuildable output (logs etc.), safe to delete
+backend/cache/
 # Generated
 backend/.venv/
 ios/Phonarr.xcodeproj/

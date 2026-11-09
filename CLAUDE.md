@@ -21,7 +21,9 @@ backend/                    THE BACKEND (runs in Docker next to Radarr/Sonarr)
   Dockerfile                Image = gateway + web/ (WEB_DIR=/srv/web). Build from the repo root: -f backend/Dockerfile .
   docker-compose.yml        Standalone, builds from this checkout (used by build-web.sh, reads backend/.env)
   compose-entry.yml         Service block to paste into the owner's big Arr compose file; pulls the GHCR image
-  app/boot.py               Container ENTRYPOINT: chowns /data to PUID:PGID, drops root, checks /data is writable, execs uvicorn
+  app/boot.py               Container ENTRYPOINT: chowns data/ and cache/ to PUID:PGID, drops root, checks data/ is writable, execs uvicorn
+  app/__main__.py           CLI: `python -m app export-data [FILE|-]` / `import-data FILE|- [--replace]` (`phonarr …` in the image)
+  app/datafiles.py          Whole data folder to/from one .zip with a manifest (SQLite backup API, checksums, staging swap)
   app/main.py               FastAPI routes, auth, /v1/health, request log + request ids + JSON errors, debug bundle, dev mode, mounts web/ at / (last)
   app/service.py            Gateway: config, discovery, requests/dedupe/retry, status aggregation, adaptive polling
   app/arr.py                Radarr/Sonarr v3 HTTP client and actionable error messages
@@ -29,7 +31,8 @@ backend/                    THE BACKEND (runs in Docker next to Radarr/Sonarr)
   app/sources.py            Optional titles list (titles.json, IDs only)
   app/db.py                 SQLite (stdlib)
   app/compat.py             API compatibility check: live probes, safe validation probes, OpenAPI spec diff, change history
-  app/config.py             Config manager: cfg() reads config/settings.json (env overrides listed there), msg() reads config/messages.json
+  app/config.py             Config manager: cfg() reads config/settings.json (env overrides listed there), msg() reads config/messages.json;
+                            data_dir()/data_file()/output_dir() and check_paths() (every data path inside the data folder)
   app/config/               settings.json + messages.json: every tunable and message string
   app/logs.py               get_logger, @traced entry/exit, daily-rolling files (main gateway.log + per-area), secret redaction
   app/devfake.py            In-memory Radarr/Sonarr used by the tests and DEV_FAKE_ARR=1
@@ -73,6 +76,7 @@ ios/                        IPHONE APP (second frontend)
 - Logs and debug bundles must never contain API keys or the token. Register new secrets with `logs.register_secret` (Python), `AppLog.registerSecret` (Swift) or `registerSecret` in `web/js/log.js`.
 - Every error response uses `{"error": {"kind", "message", "request_id"}}`, including 401, 404, validation errors and unexpected exceptions (main.py handlers + `request_log` middleware). Frontends send `X-Request-Id` and log it; keep both sides doing so.
 - Log what an operator needs without DEBUG: failures with their reason, state transitions (`Gateway._note_health`), and one line per API call. Routine Arr calls and status polls stay at DEBUG.
+- Everything the user makes and can't rebuild lives in the one data folder (`storage` in settings.json, every path inside it, `check_paths` enforces it). Logs and other generated files go in the output folder; secrets stay in `.env`. A new data file gets a `storage.data_files` key; a new secret file also goes in `storage.secret_files` so exports skip it.
 - `/v1/health` stays unauthenticated and free of URLs, keys and error text. Docker's healthcheck depends on it; an Arr app being down is `status: "degraded"`, never an unhealthy gateway.
 
 ## Logging and config (all three platforms)

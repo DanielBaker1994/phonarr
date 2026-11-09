@@ -6,3 +6,8 @@
 **/__pycache__
 **/*.pyc
 web/tests/
+# Never in the image, even if the allow-list above changes: data, rebuildable output, secrets.
+backend/data/
+backend/devdata/
+backend/cache/
+**/.env

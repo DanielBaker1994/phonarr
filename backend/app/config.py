@@ -66,3 +66,74 @@ def msg(key: str, **values: Any) -> str:
 def reload() -> None:
     """Forget cached files (tests)."""
     _load.cache_clear()
+
+
+# --- where files live ------------------------------------------------------------------------------
+# Three kinds of files, kept apart (see README "Where things live"):
+#   data    storage.data_dir:   everything the user made and can't rebuild. Exported/imported whole.
+#   output  storage.output_dir: logs and other generated files. Safe to delete.
+#   secrets backend/.env (ARR_GATEWAY_TOKEN, RADARR_API_KEY ...): never in the image or an export.
+# Both folders are relative to the project root: the folder holding this `app` package
+# (backend/ in a checkout, /app in the Docker image). DATA_DIR / OUTPUT_DIR move a whole folder.
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+class ConfigError(Exception):
+    """A setting that can't work. The message names the file and the key."""
+
+
+def _folder(key: str) -> Path:
+    override = os.environ.get(cfg(f"{key}_env"), "").strip()
+    return Path(override).resolve() if override else (PROJECT_ROOT / cfg(key)).resolve()
+
+
+def data_dir() -> Path:
+    return _folder("storage.data_dir")
+
+
+def output_dir() -> Path:
+    return _folder("storage.output_dir")
+
+
+def data_file(key: str, base: Path | None = None) -> Path:
+    """A file in the data folder by its storage.data_files key, e.g. data_file("database")."""
+    return (base or data_dir()) / cfg(f"storage.data_files.{key}")
+
+
+def output_path(key: str, base: Path | None = None) -> Path:
+    """A path in the output folder by its storage.output_paths key, e.g. output_path("logs")."""
+    return (base or output_dir()) / cfg(f"storage.output_paths.{key}")
+
+
+def _source(dotted: str) -> Path:
+    """The settings file a key's value comes from: the CONFIG_DIR override if it sets it, else the default."""
+    override = os.environ.get("CONFIG_DIR")
+    path = Path(override) / "settings.json" if override else None
+    if path and path.exists():
+        try:
+            _dig(json.loads(path.read_text(encoding="utf-8")), dotted)
+            return path
+        except (KeyError, TypeError):
+            pass
+    return _DEFAULT_DIR / "settings.json"
+
+
+def _inside(value: str, dotted: str, folder_key: str) -> None:
+    p = Path(value)
+    if p.is_absolute() or not p.parts or ".." in p.parts:
+        raise ConfigError(msg("errors.config_path_outside", file=_source(dotted), setting=dotted, value=value,
+                              folder=cfg(folder_key)))
+
+
+def check_paths() -> None:
+    """Raise ConfigError unless every data path sits inside the data folder, every output path inside
+    the output folder, and neither folder contains the other (an export must not pick up logs)."""
+    for key, value in cfg("storage.data_files").items():
+        _inside(value, f"storage.data_files.{key}", "storage.data_dir")
+    for key, value in cfg("storage.output_paths").items():
+        _inside(value, f"storage.output_paths.{key}", "storage.output_dir")
+    data, out = data_dir(), output_dir()
+    if data == out or data in out.parents or out in data.parents:
+        raise ConfigError(msg("errors.config_folders_overlap", file=_source("storage.output_dir"),
+                              data=data, output=out))

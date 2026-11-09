@@ -2,6 +2,16 @@
 
 Discover films and TV shows and add them to your existing Radarr and Sonarr in one tap. Inspired by Seerr. Product requirements: [seerr_iphone_app_prd.md](seerr_iphone_app_prd.md).
 
+## Screenshots
+
+The web app on an iPhone 13 (Discover and a title's details) and on a 1440 px desktop browser, running against the simulated Radarr/Sonarr from `./dev.sh` (so posters show placeholders).
+
+<p>
+  <img src="docs/screenshots/iphone-discover.png" alt="Discover on iPhone" width="240" />
+  <img src="docs/screenshots/iphone-detail.png" alt="Title details on iPhone" width="240" />
+</p>
+<img src="docs/screenshots/desktop-movies.png" alt="Movies on a desktop browser" width="720" />
+
 ## Backend and frontends
 
 There is one **backend** and two **frontends**. The backend is the only thing that talks to Radarr and Sonarr, and the only thing that holds their API keys.

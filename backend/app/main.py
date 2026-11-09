@@ -24,6 +24,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from .arr import TIMINGS, ArrError
@@ -190,6 +191,8 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
     started_at = time.time()
     app = FastAPI(title="Phonarr gateway", version=APP_VERSION, lifespan=lifespan)
     app.state.gateway = gateway
+    # Compress the web app's JS/CSS and the catalogue JSON: phones on Tailscale over mobile data load ~4x fewer bytes.
+    app.add_middleware(GZipMiddleware, minimum_size=cfg("http.gzip_min_bytes"))
 
     def auth(authorization: str = Header(default="")) -> None:
         scheme, _, value = authorization.partition(" ")

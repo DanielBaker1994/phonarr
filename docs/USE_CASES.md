@@ -188,7 +188,9 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | Debug report | Share sheet with a zip built on the phone | `POST /v1/debug/bundle` with the browser log; share sheet over HTTPS, download over HTTP | Browsers can't build zips without a library |
 | Offline start | Cached catalogue in Caches | Cached catalogue in `localStorage`; the app shell itself only over HTTPS (service worker) | Service workers need a secure context |
 | Pull to refresh | System pull-to-refresh | Refresh button in the header | Pull-to-refresh fights the browser's own scrolling |
-| Wide screens | iPhone only | Side bar instead of tab bar, bigger grids | Laptops and iPads |
+| Wide screens | iPhone only | Side bar (with the app name) instead of tab bar from 900 px, content centred beside it, bigger grids from 1600 px; hover lift on posters and hover rows for a mouse; Escape closes sheets; keyboard focus ring | Laptops and iPads |
+| iPhone Safari fit | Native | Safe-area padding top, bottom and both sides (landscape notch); `dvh` heights so sheets fit with Safari's toolbars; every field 16 px so Safari never zooms in; 44 px hit areas on small controls; no double-tap zoom on controls; press feedback on touch; sheets don't scroll the page behind; pinch zoom stays on; reduced motion respected (`web/css/app.css`, `web/index.html`, checked by `web/tests/shell.test.mjs`) | A browser has none of this by default |
+| First load | App bundle | All modules and both config files preload in parallel (`<link rel=modulepreload>` in `index.html`); the gateway gzips JS, CSS and JSON (about 167 KB to 58 KB) | Plain HTTP over Tailscale has no service worker cache |
 | API console | — | `/console/` (§14) | Served by the gateway |
 
 ## 14. API console (`/console/`)

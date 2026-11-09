@@ -73,6 +73,9 @@
       "sonarr": 8989
     }
   },
+  "http": {
+    "gzip_min_bytes": 1024
+  },
   "env": {
     "logging.level": "LOG_LEVEL",
     "gateway.batch_max": "BATCH_MAX",

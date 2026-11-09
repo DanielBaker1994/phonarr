@@ -25,6 +25,9 @@
   --tabbar-h: 56px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);    /* landscape iPhone: the notch / Dynamic Island side */
+  --safe-r: env(safe-area-inset-right, 0px);
+  --rail-w: 210px;
   color-scheme: light dark;
 }
 
@@ -77,7 +80,15 @@ body {
 }
 body.sheet-open { overflow: hidden; }
 a { color: inherit; text-decoration: none; }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+/* iOS Safari zooms the page into any field under 16 px; keep every field at 16 px or more. */
+input, select, textarea { font-size: max(16px, 1em); }
+/* No double-tap-to-zoom on controls, so quick taps on + or Select register at once. */
+a, button, label, summary, select, .cell { touch-action: manipulation; }
+/* Keyboard users on desktop see where they are; touch and mouse clicks don't draw a ring. */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.frow:focus-visible, .menu-item:focus-visible, .popover-item:focus-visible { outline-offset: -2px; }
 button { cursor: pointer; background: none; border: 0; padding: 0; }
 button:disabled { cursor: default; opacity: 0.45; }
 code { font: 0.88em ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -118,7 +129,7 @@ p { margin: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------------------------------------------------------------- layout */
-.app { min-height: 100vh; }
+.app { min-height: 100vh; min-height: 100dvh; padding-left: var(--safe-l); padding-right: var(--safe-r); }
 .page { padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 24px); max-width: 1400px; margin: 0 auto; }
 .page.narrow { max-width: 520px; padding-top: calc(var(--safe-t) + 48px); }
 .page-body { display: flex; flex-direction: column; gap: 14px; }
@@ -133,7 +144,7 @@ p { margin: 0; }
   border-bottom: 0.5px solid var(--border);
   margin-bottom: 8px;
 }
-.nav-title { font-size: 17px; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+.nav-title { font-size: 17px; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; min-width: 0; }
 .nav-large { grid-template-columns: 1fr auto; padding-top: calc(var(--safe-t) + 14px); }
 .nav-large .nav-side:first-child { display: none; }
 .nav-large .nav-title { font-size: 30px; font-weight: 750; text-align: left; letter-spacing: -0.02em; }
@@ -141,6 +152,12 @@ p { margin: 0; }
 .nav-actions { justify-content: flex-end; }
 .back { display: inline-flex; align-items: center; margin-left: -6px; }
 .icon-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; color: var(--accent); border-radius: 50%; }
+/* Invisible 44 px hit areas (Apple's minimum) around controls that look smaller. */
+.icon-btn::before { content: ""; position: absolute; inset: -5px; }
+.link, .back { position: relative; }
+.link::before, .back::before { content: ""; position: absolute; inset: -11px -6px; }
+.chip { position: relative; }
+.chip::before { content: ""; position: absolute; inset: -6px -3px; }
 .dot-count {
   position: absolute; top: 0; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
   background: var(--accent); color: var(--accent-ink); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
@@ -149,7 +166,7 @@ p { margin: 0; }
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
   display: grid; grid-template-columns: repeat(5, 1fr);
-  height: calc(var(--tabbar-h) + var(--safe-b)); padding-bottom: var(--safe-b);
+  height: calc(var(--tabbar-h) + var(--safe-b)); padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
   background: var(--bar);
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--border);
@@ -157,20 +174,45 @@ p { margin: 0; }
 .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--faint); font-size: 10px; font-weight: 500; }
 .tabbar a.on { color: var(--accent); }
 body:has(.page.selecting) .tabbar { display: none; }
+.tabbar-brand { display: none; }
 
-/* Wide screens: tab bar becomes a side rail. */
+/* Wide screens: tab bar becomes a side rail. Content stays centred in the space beside it. */
 @media (min-width: 900px) {
   .tabbar {
-    top: 0; right: auto; width: 210px; height: auto; display: flex; flex-direction: column; gap: 4px;
-    padding: calc(var(--safe-t) + 70px) 12px 12px; border-top: 0; border-right: 0.5px solid var(--border);
+    top: 0; right: auto; width: var(--rail-w); height: auto; display: flex; flex-direction: column; gap: 4px;
+    padding: calc(var(--safe-t) + 18px) 12px 12px; border-top: 0; border-right: 0.5px solid var(--border);
   }
+  .tabbar-brand { display: flex; align-items: center; gap: 10px; padding: 6px 12px 22px; color: var(--text); font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .tabbar-brand .icon { color: var(--accent); }
   .tabbar a { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 10px 12px; border-radius: 10px; font-size: 15px; color: var(--muted); }
   .tabbar a.on { background: var(--accent-soft); }
-  .app:has(.tabbar) .page { margin-left: 210px; padding-bottom: 40px; }
+  .app:has(.tabbar) { padding-left: var(--rail-w); }
+  .app:has(.tabbar) .page { padding-bottom: 40px; }
   .app:has(.tabbar) .nav { padding-left: 24px; padding-right: 24px; }
   .page-body > .pad, .row-head, .scroller, .grid, .searchbar, .filter-bar, .notice, .group { margin-left: 12px !important; margin-right: 12px !important; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; }
-  .selection-bar { left: 210px !important; }
+  .selection-bar { left: var(--rail-w) !important; }
+  .toast { left: calc(50% + var(--rail-w) / 2); bottom: 24px; }
+  .detail-body .notice, .detail-body .group, .sheet .notice, .sheet .group .notice { margin-left: 0 !important; margin-right: 0 !important; }
+  .sheet .group { margin-left: 16px !important; margin-right: 16px !important; }
+}
+@media (min-width: 1600px) { .grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)) !important; } }
+
+/* Mouse and trackpad: hover feedback. Kept off touch screens, where :hover sticks after a tap. */
+@media (hover: hover) and (pointer: fine) {
+  .cell .poster { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  a.cell:hover .poster, button.cell:not(:disabled):hover .poster { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24); }
+  .quick:hover { filter: brightness(1.08); }
+  .tabbar a:hover:not(.on) { color: var(--text); background: var(--surface-2); }
+  .frow:is(a, button):hover, .menu-item:hover, .activity-row:hover, .season summary:hover, .popover-item:hover { background: var(--surface-2); }
+  .btn:not(:disabled):hover { filter: brightness(1.06); }
+  .chip:hover:not(.on) { background: var(--border); }
+  .icon-btn:hover, .link:hover { opacity: 0.8; }
+}
+/* Touch screens: a quick dim while the finger is down, like a native button. */
+@media (hover: none) {
+  .frow:is(a, button):active, .menu-item:active, .activity-row:active, .popover-item:active { background: var(--surface-2); }
+  .btn:active, .chip:active, .icon-btn:active, .link:active, .quick:active, .cell:active .poster { opacity: 0.7; }
 }
 
 /* ---------------------------------------------------------------- posters */
@@ -189,7 +231,7 @@ body:has(.page.selecting) .tabbar { display: none; }
 .grid.flush { padding: 0; }
 @media (min-width: 560px) { .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
 
-.cell { display: flex; flex-direction: column; gap: 6px; text-align: left; min-width: 0; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.cell { cursor: pointer; display: flex; flex-direction: column; gap: 6px; text-align: left; min-width: 0; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 .cell.dim { opacity: 0.45; }
 .cell-text { min-width: 0; }
 .cell-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -230,7 +272,7 @@ body:has(.page.selecting) .tabbar { display: none; }
 .quick.retry { background: var(--bad); }
 .quick::before { content: ""; position: absolute; inset: -6px; }   /* 44 px hit area */
 .mark {
-  position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; border-radius: 50%;
+  position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; border-radius: 50%; pointer-events: none;
   border: 2px solid #fff; background: rgba(0, 0, 0, 0.3); display: flex; align-items: center; justify-content: center;
 }
 .mark.selected { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -256,7 +298,6 @@ body:has(.page.selecting) .tabbar { display: none; }
   background: var(--surface); border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35); border: 0.5px solid var(--border);
 }
 .popover-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 9px 10px; border-radius: 8px; text-align: left; font-size: 15px; }
-.popover-item:hover { background: var(--surface-2); }
 .popover-item .tick { width: 18px; color: var(--accent); }
 
 /* ---------------------------------------------------------------- notices, cards, empty states */
@@ -376,18 +417,19 @@ details.feature[open] summary { margin-bottom: 6px; }
 .sheet-backdrop {
   position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.45);
   display: flex; align-items: flex-end; justify-content: center; animation: fade 0.18s ease;
+  overscroll-behavior: contain;
 }
 .sheet {
-  width: 100%; max-width: 640px; max-height: 92vh; display: flex; flex-direction: column;
-  background: var(--bg); border-radius: 14px 14px 0 0; padding-bottom: var(--safe-b);
+  width: 100%; max-width: 640px; max-height: 92vh; max-height: 92dvh; display: flex; flex-direction: column;
+  background: var(--bg); border-radius: 14px 14px 0 0; padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
   animation: rise 0.22s ease;
 }
 .sheet.compact { max-width: 480px; }
 .sheet-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 0.5px solid var(--border); }
-.sheet-body { overflow-y: auto; padding: 16px 0 24px; display: flex; flex-direction: column; gap: 18px; -webkit-overflow-scrolling: touch; }
+.sheet-body { overflow-y: auto; padding: 16px 0 24px; display: flex; flex-direction: column; gap: 18px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 @media (min-width: 700px) {
   .sheet-backdrop { align-items: center; }
-  .sheet { border-radius: 14px; max-height: 80vh; }
+  .sheet { border-radius: 14px; max-height: 80vh; max-height: 80dvh; padding: 0; }
 }
 @keyframes fade { from { opacity: 0; } }
 @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
@@ -400,7 +442,7 @@ details.feature[open] summary { margin-bottom: 6px; }
 
 .selection-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; display: flex; flex-direction: column; gap: 8px;
-  padding: 12px 16px calc(12px + var(--safe-b)); background: var(--bar);
+  padding: 12px calc(16px + var(--safe-r)) calc(12px + var(--safe-b)) calc(16px + var(--safe-l)); background: var(--bar);
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-top: 0.5px solid var(--border);
 }
 .selection-actions { display: flex; justify-content: space-between; }
@@ -408,9 +450,19 @@ details.feature[open] summary { margin-bottom: 6px; }
 .toast {
   position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + var(--safe-b) + 16px); transform: translateX(-50%); z-index: 60;
   padding: 10px 18px; border-radius: 99px; background: var(--surface); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
-  font-size: 14px; font-weight: 600; white-space: nowrap; animation: rise 0.2s ease;
+  font-size: 14px; font-weight: 600; text-align: center; width: max-content; max-width: calc(100vw - 32px); animation: rise 0.2s ease;
 }
 @media (min-width: 900px) { .row.flush .row-head, .row.flush .scroller { margin-left: 0 !important; margin-right: 0 !important; } }
 
 /* System status → Recent problems */
 .log-lines { margin: 0; max-height: 240px; overflow: auto; font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; color: var(--muted); }
+
+/* People who ask the system for less motion get no slides or lifts; spinners and progress keep moving. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .spinner, .poster-progress i.indeterminate { animation-duration: 1.2s !important; }
+}
+
+/* A select row opens its picker from anywhere right of the label: on iOS a tap on the <label> alone doesn't open it. */
+.frow:has(> select.row-value) .row-label { flex: 0 1 auto; }
+.frow > select.row-value { flex: 1 1 auto; align-self: stretch; min-height: 44px; max-width: none; margin: -8px 0; }

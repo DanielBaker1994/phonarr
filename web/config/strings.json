@@ -44,5 +44,8 @@
     "health_not_json": "Something answered at /v1/health, but not the gateway (HTTP {status}). Is a proxy or another app on this port?",
     "screen_crashed": "This screen hit a bug.",
     "screen_crashed_help": "Reload to carry on. A debug report includes the error, so it can be fixed."
+  },
+  "app": {
+    "name": "Phonarr"
   }
 }

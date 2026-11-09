@@ -45,6 +45,7 @@ function Screen({ route }) {
 
 function TabBar({ current }) {
   return html`<nav class="tabbar" aria-label="Sections">
+    <div class="tabbar-brand" aria-hidden="true"><${Icon} name="popcorn" size=${26} stroke=${1.7} /><span>${text("app.name")}</span></div>
     ${TAB_ITEMS.map(([id, label, icon]) => html`<a href=${`#/${id}`} class=${current === id ? "on" : ""}
         aria-current=${current === id ? "page" : null}><${Icon} name=${icon} size=${22} /><span>${label}</span></a>`)}
   </nav>`;

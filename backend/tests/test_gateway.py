@@ -654,6 +654,14 @@ def test_web_frontend_is_served_next_to_the_api(client):
     assert client.get("/docs").status_code == 200
 
 
+def test_web_files_and_api_are_gzipped(client):
+    """Phones load the app over mobile data: JS, CSS and JSON go out compressed when the client asks."""
+    r = client.get("/js/store.js", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200 and r.headers.get("content-encoding") == "gzip" and "export" in r.text
+    assert client.get("/css/app.css", headers={"Accept-Encoding": "gzip"}).headers.get("content-encoding") == "gzip"
+    assert client.get("/js/store.js", headers={"Accept-Encoding": "identity"}).headers.get("content-encoding") is None
+
+
 def test_api_only_when_web_dir_is_missing(tmp_path, fake):
     app = create_app(data_dir=tmp_path, transport=fake.transport(), run_poller=False, token=TOKEN,
                      web_dir=tmp_path / "no-web-here")

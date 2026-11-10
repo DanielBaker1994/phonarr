@@ -1,5 +1,5 @@
 // Hash routes, so the gateway can serve the app as plain static files with no server-side fallback.
-//   #/discover  #/movies  #/tv  #/activity  #/settings[/radarr|/sonarr|/defaults|/compat]
+//   #/discover  #/movies  #/tv  #/activity  #/settings[/radarr|/sonarr|/defaults|/compat|/status|/logs]
 //   #/title/<movie|series>/<id>   #/similar/<movie|series>/<id>
 import { emit } from "./store.js";
 

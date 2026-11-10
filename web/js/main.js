@@ -15,6 +15,7 @@ import { SimilarListView } from "./views/similar.js";
 import { ActivityView } from "./views/activity.js";
 import { CompatView } from "./views/compat.js";
 import { StatusView } from "./views/status.js";
+import { LogsView } from "./views/logs.js";
 import { DefaultsView, ServiceConnectionView, SettingsView, SetupFlowView, SignInView } from "./views/settings.js";
 
 const TAB_ITEMS = [
@@ -38,6 +39,7 @@ function Screen({ route }) {
       if (a === "defaults") return html`<${DefaultsView} />`;
       if (a === "compat") return html`<${CompatView} />`;
       if (a === "status") return html`<${StatusView} />`;
+      if (a === "logs") return html`<${LogsView} />`;
       return html`<${SettingsView} />`;
     default: return html`<${DiscoverView} />`;
   }

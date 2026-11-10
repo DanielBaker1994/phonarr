@@ -3,6 +3,7 @@
 // Polling follows the gateway's next_poll_seconds, sends If-None-Match, and stops while the tab is hidden.
 import { api, uuid } from "./api.js";
 import { log } from "./log.js";
+import { text } from "./config.js";
 import { emptyFilters } from "./filters.js";
 import { IDLE, SUBMITTING, MEDIA_TYPES, SERVICE_FOR, cardKey } from "./models.js";
 
@@ -10,7 +11,7 @@ const listeners = new Set();
 export const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 export function emit() { for (const fn of listeners) fn(); }
 
-const pref = {
+export const pref = {
   get(key, fallback) {
     try { const v = localStorage.getItem(`ayr.${key}`); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
   },
@@ -224,6 +225,10 @@ export const statusFor = (card) => statusOf(card.type, card.id, card.status);
 export const isSelectable = (card) => ["not_requested", "failed"].includes(statusFor(card).state);
 
 // ------------------------------------------------------------------ requests
+// key -> idempotency key of an add whose answer never arrived (connection lost mid-request). The next tap
+// sends the same key, so the gateway can tell it's the same request (KB-01).
+const unansweredAdds = {};
+
 /** One-tap add with the saved defaults. `override` is one-off and never saved as a default. */
 export const add = log.traced("store.add", async (type, id, override = null) => {
   const key = `${type}:${id}`;
@@ -231,19 +236,31 @@ export const add = log.traced("store.add", async (type, id, override = null) => 
   const current = statusOf(type, id);
   if (current.state === "failed") return retry(type, id);
   if (current.state !== "not_requested") return;
-  const idem = uuid();
+  const before = state.statuses[key];
+  const idem = unansweredAdds[key] || uuid();
   state.inFlight[key] = idem;
   emit();
   try {
     log.info("request", { key, profile: override?.quality_profile_id ?? "default", root: override?.root_folder ?? "default", seasons: override?.season_monitor ?? "default" });
     const r = await api.request(type, id, override, idem);
+    delete unansweredAdds[key];
     state.statuses[key] = r.status;
     log.info("request_result", { key, state: r.status.state, dedup: r.deduplicated ? " (already tracked)" : "" });
     toast(r.deduplicated ? "Already in your library" : "Added to library");
   } catch (e) {
     log.error("request_failed", { key, error: e.message });
-    state.statuses[key] = { state: "failed", message: e.message, error_kind: e.kind };
-    if (e.unauthorized) handleAuthFailure();
+    if (e.transport) {
+      // We can't tell whether the gateway got it, so don't claim Failed: put the title back as it was,
+      // keep the key for the next tap, and let the poll below show what really happened.
+      unansweredAdds[key] = idem;
+      if (before === undefined) delete state.statuses[key];
+      else state.statuses[key] = before;
+      toast(text("errors.add_unreached"));
+    } else {
+      delete unansweredAdds[key];
+      state.statuses[key] = { state: "failed", message: e.message, error_kind: e.kind };
+      if (e.unauthorized) handleAuthFailure();
+    }
   } finally {
     delete state.inFlight[key];
     emit();
@@ -342,6 +359,9 @@ export async function loadActivity() {
 let pollTimer = null;
 let etag = null;
 let viewers = 0;      // Activity or a details page is on screen
+// Bumped by every refreshNow/stopPolling. A loop whose poll returns after a newer loop started (or after
+// polling stopped) exits instead of rescheduling itself, so there is never more than one loop (KB-04).
+let pollGeneration = 0;
 
 export function beginWatching() {
   viewers += 1;
@@ -350,6 +370,7 @@ export function beginWatching() {
 export function endWatching() { viewers = Math.max(0, viewers - 1); }
 
 export function stopPolling() {
+  pollGeneration += 1;
   clearTimeout(pollTimer);
   pollTimer = null;
 }
@@ -357,8 +378,10 @@ export function stopPolling() {
 export function refreshNow() {
   if (!state.paired || document.hidden) return;
   stopPolling();
+  const generation = pollGeneration;
   const loop = async () => {
     const wait = await pollOnce();
+    if (generation !== pollGeneration) return;
     if (state.paired && !document.hidden) pollTimer = setTimeout(loop, wait * 1000);
   };
   pollTimer = setTimeout(loop, 0);

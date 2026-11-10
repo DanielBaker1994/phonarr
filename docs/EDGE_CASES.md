@@ -1,6 +1,6 @@
 # Edge cases
 
-✅ = handled and covered by a test (`backend/tests/test_gateway.py`, `web/tests/`). 🟢 = handled in code without an automated test (iOS has no test target yet; the web UI was checked by hand in a phone-sized browser). ⏳ = known and not handled yet.
+✅ = handled and covered by a test (`backend/tests/test_gateway.py`, `backend/tests/test_known_bugs.py`, `web/tests/`). 🟢 = handled in code without an automated test (iOS has no test target yet; the web UI was checked by hand in a phone-sized browser). ⏳ = known and not handled yet.
 
 Unless a row says otherwise, frontend behaviour applies to both the web app and the iPhone app.
 
@@ -25,7 +25,9 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 |---|---|---|
 | Repeated taps, network retries, two phones at once | A per-title lock, a DB unique constraint and an idempotency key. One Arr record | ✅ `test_repeated_taps…`, `test_concurrent…` |
 | Title already in Radarr or Sonarr (added outside the app) | Linked, not added again | ✅ |
-| Arr says "already been added" (race with another client) | Re-reads the library and links | 🟢 |
+| Arr says "already been added" (race with another client) | Re-reads the library and links | ✅ `test_already_added_by_someone_else_is_linked` (KB-03) |
+| The add times out but Radarr/Sonarr saved it | Re-reads the library once and links it, instead of showing Failed | ✅ `test_add_that_timed_out_but_landed_is_linked` (KB-02) |
+| Phone loses the connection while adding | The title goes back to how it was (not Failed) with "Couldn't reach the gateway…"; the next tap re-sends with the same idempotency key | ✅ web `store.test.mjs` (KB-01), 🟢 iPhone |
 | No default profile or root folder, and several exist | Config failure on the poster with a pointer to Settings. Retry works once it's fixed | ✅ |
 | Default profile deleted in Arr | Falls back to the only profile if there is just one, otherwise asks for a new default | ✅ (logic shared with the above) |
 | Root folder reported as inaccessible by Arr | Config error before anything is added | ✅ `test_inaccessible_root_folder…` |
@@ -46,7 +48,10 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | Size unknown (`size` = 0) | No percentage, an indeterminate bar | ✅ |
 | Library items with no TMDB or TVDB ID (manual imports) | Ignored | ✅ |
 | Series monitoring "future only" with nothing aired | "Waiting for new episodes" | 🟢 |
-| Title deleted from Arr after the request | Failed: "No longer in Radarr. Retry will add it again." Retry re-adds only after confirming it's gone | 🟢 |
+| Title deleted from Arr after the request | Failed: "No longer in Radarr. Retry will add it again." only after `gateway.missing_confirmations` (2) library reads in a row agree it's gone; until then the last status stays. Retry re-adds only after confirming it's gone | ✅ `test_one_empty_library_answer_does_not_orphan_requests` (KB-07) |
+| Radarr answers the library call with `[]` once (restarting, database locked) | Nothing flips to "No longer in Radarr"; the next cycle reads the library fresh | ✅ same test |
+| `null` where Arr normally sends a list or object (`images`, `genres`, `ratings`, `statistics`, `seasons`, episode counts), unknown queue states | Discover, status and activity still show every title | ✅ `test_nulls_and_unknown_values…` (KB-20) |
+| Season 0 (specials) | Never counted as the first or latest season, or in the season count | ✅ `test_specials_never_count…` (KB-21) |
 | Arr unreachable | Last known status kept and marked `stale`. Banner shown | ✅ |
 
 ## Retry
@@ -55,6 +60,8 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | Failed download | Clears the failed queue item (blocklisting the release) and searches again on the **existing** record | ✅ |
 | Repeated Retry taps | 30-second cooldown, so it doesn't hammer the indexers | ✅ |
 | Retry while Arr is down | 503 with a message. No cooldown is set, so you can try again | ✅ |
+| Retry on a title the gateway never saw (the add never reached it) | Adds it with the defaults if it isn't in Arr; 404 only if Arr can't find the title at all | ✅ `test_retry_of_a_title_the_gateway_never_saw_adds_it` (KB-01) |
+| Wall clock jumps back (VM resume, NTP) | Cooldowns, caches and poll timing use a monotonic clock, so nothing freezes | ✅ `test_clock_going_backwards…` (KB-10) |
 
 ## Discovery sources
 | Case | Behaviour | |
@@ -64,6 +71,8 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | An ID in `titles.json` Radarr/Sonarr can't find | Hidden and logged | 🟢 |
 | Excluded titles in Radarr's Discover feed | Hidden | ✅ |
 | Search term matches only an alternate title | Lookup results are kept even when the shown title doesn't contain the term | ✅ |
+| Lookup answers an error object or `null` (Arr starting up) | Shown as a search error, never cached as "no results", never a 500 | ✅ `test_search_does_not_cache…` (KB-06) |
+| Typing while a search is running (iPhone) | The cancelled search shows no error and doesn't leave the spinner on | 🟢 (KB-05) |
 | Radarr has no import lists and an empty library | Discover shows search hints instead of an empty screen | 🟢 |
 
 ## Web frontend, health and deployment
@@ -73,7 +82,9 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | Image or checkout without `web/` | API only; `/v1/health` says `web_frontend: false` | ✅ `test_api_only_when_web_dir_is_missing` |
 | Plain HTTP over Tailscale (not a secure context) | No service worker, no `crypto.randomUUID` (fallback UUID for idempotency keys), no clipboard API (console falls back to `execCommand`), debug report downloads instead of sharing | 🟢 |
 | Old web files cached after an update | Files are `Cache-Control: no-cache` with ETag; the service worker is network-first | 🟢 |
-| Web tab or home screen app hidden | Polling stops (`visibilitychange`), restarts on return | 🟢 |
+| Web tab or home screen app hidden | Polling stops (`visibilitychange`), restarts on return. A refresh during a slow poll never leaves a second loop running | ✅ `store.test.mjs` (KB-04) |
+| Radarr/Sonarr answer with something that isn't JSON | The log names the call, status, content type and the start of the body (redacted) | ✅ `test_non_json_answer_is_logged…` (KB-22) |
+| An Arr error message contains a URL with `apikey=` | Redacted in every log line | ✅ `test_background_errors_never_log_keys` (KB-23) |
 | Gateway token rotated (web) | Back to sign-in with an explanation | 🟢 |
 | localStorage full or blocked (private mode) | Token lasts for the tab; catalogue cache skipped | 🟢 |
 | Radarr or Sonarr down | `/v1/health` stays `ok: true` (Docker stays healthy) with `status: degraded` and that server `reachable: false` | ✅ `test_health_reports_services_without_secrets` |
@@ -94,6 +105,25 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | JavaScript error in the web app | Logged (and in the debug report); a crash while rendering shows a panel with Reload and Download debug report | ✅ `web/tests/config-log.test.mjs`, 🟢 checked in a browser |
 | iPhone app crashes | MetricKit report saved into the log folder on the next launch, included in the debug report | 🟢 not compiled yet |
 | GHCR package private | `docker compose pull` is denied until the server logs in (docs/DEPLOYMENT.md §2.3) | 🟢 documented |
+
+## Calendar
+| Case | Behaviour | |
+|---|---|---|
+| Film release date west of UTC (Radarr sends `2026-11-12T00:00:00Z`) | Shown on the 12th everywhere: release dates are days, never converted | ✅ `test_calendar_movie_dates_are_days_not_instants`, `calendar.test.mjs` |
+| Episode at 02:00 UTC seen from New York or Tokyo | 21:00 the day before in New York, 11:00 the same day in Tokyo | ✅ `test_calendar_episode_times_follow_viewer_timezone` |
+| Late episode at the edge of the range | Radarr/Sonarr are asked for the range padded by a day each side, then entries are filtered to the local range | ✅ `test_calendar_range_edges_keep_late_episodes` |
+| Episode without `airDateUtc` | Its `airDate`, with no time | ✅ `test_calendar_episode_without_utc_time_uses_air_date` |
+| Unknown or junk `tz` | UTC, `tz_fallback: true`, a notice in the frontends; never a 500. `tzdata` is installed so slim images know every zone | ✅ `test_calendar_unknown_timezone_falls_back_to_utc` |
+| Daylight saving weekends (Europe/London, America/New_York, both directions) | Every day once, in order; times follow the offset change | ✅ `test_calendar_days_step_by_calendar_day_over_dst_*`, `calendar.test.mjs` |
+| Bad `start`/`end`, end before start, more than 92 days | 422 in the usual error envelope | ✅ `test_calendar_default_range_and_validation` |
+| Connection changed or removed | That server's cached calendar is dropped straight away | ✅ `test_calendar_follows_connection_changes` |
+| One server down, or both | The other's entries plus that server's error in `services`; both down is still a 200. Errors are never cached | ✅ `test_calendar_partial_failure_keeps_other_service` |
+| A season released at once | One entry per show, season and day ("8 episodes") | ✅ `test_calendar_collapses_episode_bundles` |
+| Episode monitored but series unmonitored | Unmonitored (faded, listed last) | ✅ `test_calendar_orders_monitored_first_and_counts_series_monitoring` |
+| Requested or downloading while the Calendar is open | Status comes from the live snapshot, not the cached calendar | ✅ `test_calendar_entries_carry_status` |
+| The poller | Never calls `/api/v3/calendar` | ✅ `test_calendar_is_fetched_on_demand_never_polled` |
+| Calendar left open overnight, or resumed days later | Today moves and the list reloads | ✅ web (`calendar.test.mjs`), 🟢 iPhone |
+| Opening on Today without a jump | Placed before the first paint (checked frame by frame in Chromium, iPhone 13 viewport) | 🟢 web checked by hand, iPhone not compiled |
 
 ## Not handled yet
 - ⏳ Push notifications when a download finishes. This needs the paid account plus APNs, or a self-hosted ntfy.

@@ -58,6 +58,22 @@ Richness: ●●● present for nearly every title · ●●○ usually present,
 
 Radarr's Discover feed (`GET /api/v3/importlist/movie?includeRecommendations=true`) returns the same `MovieResource` shape as a lookup, plus `isRecommendation`, `isExcluded` and `isExisting`. The gateway caches it for 10 minutes and stores each entry as lookup metadata, so opening or requesting one doesn't need another lookup.
 
+## Calendar (`GET /api/v3/calendar`)
+
+The Calendar asks both apps for `/api/v3/calendar?start=&end=&unmonitored=true` (Sonarr also `includeSeries=true`), over the UTC window of the viewer's local range padded by a day on each side. Both only return titles that are already in the library.
+
+| App | Field | How rich | What the gateway does with it |
+|---|---|---|---|
+| Radarr | `inCinemas`, `digitalRelease`, `physicalRelease` | Usually set for new films from TMDB; often only one or two of the three, and none for old films | One entry per kind in range: `cinema`, `digital`, `physical`. They are **days** sent as `…T00:00:00Z`: the date part is used, never converted by timezone (KB-12) |
+| Radarr | `tmdbId`, `title`, `year`, `images`, `monitored`, `hasFile` | Always | `id`, `title`, `year`, `poster`, `monitored`, `has_file` |
+| Sonarr | `airDateUtc` | Set for nearly every episode with a known air time | Converted to the viewer's IANA timezone for the day and `HH:MM` (KB-13) |
+| Sonarr | `airDate` | The air date in the network's timezone | Used, as a day with no time, only when `airDateUtc` is missing |
+| Sonarr | `seasonNumber`, `episodeNumber`, `title`, `monitored`, `hasFile` | Always (episode titles are often "TBA" until close to the date) | `season`, `episodes [first, last]`, `count`, `episode_title` (single episodes only), `special` (season 0), `has_file` (every episode in the entry) |
+| Sonarr | `finaleType` (v4) | `series`, `season` or `midseason`, only on finales and only on Sonarr v4 | `finale`; `premiere` is worked out from episode 1 (`series` for season 1, `season` otherwise) |
+| Sonarr | `series.tvdbId`, `series.title`, `series.images`, `series.monitored` | With `includeSeries=true` | `id`, `title`, `poster`; `monitored` is the episode's flag **and** the series' (KB-34) |
+
+Each entry also carries `status` from the gateway's status snapshot (the same one `/v1/status` serves), so a request or download shows on the Calendar straight away (KB-36). Episodes of one show, season and local day become one entry (KB-32).
+
 ## What this means in practice
 - **Rich enough:** genre, decade or year, runtime, language, studio or network, and ratings for most films. These give useful filters and decent "More like this" results.
 - **Thin:** certification (nearly always empty before 1968), keywords and collections (rare), TV ratings, and anything about cast or crew (not available before a title is in your library).

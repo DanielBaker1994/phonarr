@@ -199,6 +199,7 @@ struct MediaGridView: View {
     @State private var searchResults: [MediaCard] = []
     @State private var searchError: String?
     @State private var searchingRemote = false
+    @State private var searchRun = 0   // the newest runSearch; older ones never touch the results or spinner
     @State private var sending = false
 
     private let columns = [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: 14, alignment: .top)]
@@ -382,16 +383,19 @@ struct MediaGridView: View {
     }
 
     private func runSearch() async {
+        searchRun += 1
+        let run = searchRun
+        // Every exit of the newest search clears the spinner, including cancellation (KB-05).
+        defer { if run == searchRun { searchingRemote = false } }
         let q = query.trimmingCharacters(in: .whitespaces)
         guard q.count >= 2 else { searchResults = []; searchError = nil; return }
         try? await Task.sleep(for: .milliseconds(450))   // debounce while typing
         guard !Task.isCancelled else { return }
         searchingRemote = true
         let r = await model.search(type, query: q)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, run == searchRun else { return }
         searchResults = r.items
         searchError = r.error
-        searchingRemote = false
     }
 
     /// Show the value being sorted by under each poster, so the order makes sense.

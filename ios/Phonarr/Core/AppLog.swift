@@ -33,10 +33,32 @@ enum AppLog {
         return f
     }()
 
+    /// Every line starts with UTC ISO 8601 with milliseconds and Z ("2026-11-10T08:00:00.123Z"), the same
+    /// form as the gateway (KB-11) and the web app, so Settings → Logs and debug reports line up.
+    private static let stampFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.timeZone = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0) ?? .current
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let stampLock = NSLock()
+
+    static func stamp(_ date: Date = Date()) -> String {
+        stampLock.lock()
+        defer { stampLock.unlock() }
+        return stampFormatter.string(from: date)
+    }
+
+    static func parseStamp(_ text: String) -> Date? {
+        stampLock.lock()
+        defer { stampLock.unlock() }
+        return stampFormatter.date(from: text)
+    }
+
     /// Appends one line straight to app.log, bypassing the queue: for a dying process
     /// (uncaught exception), where an async write would never run.
     static func writeNow(_ key: String, _ values: [String: Any]) {
-        let line = "\(Date().formatted(.iso8601)) ERROR AppLog.writeNow: \(AppConfig.text("log.\(key)", values))\n"
+        let line = "\(stamp()) ERROR AppLog.writeNow: \(AppConfig.text("log.\(key)", values))\n"
         guard let data = line.data(using: .utf8) else { return }
         if let h = try? FileHandle(forWritingTo: current) {
             h.seekToEndOfFile()
@@ -99,11 +121,10 @@ enum AppLog {
     private static func write(_ level: String, _ key: String, _ values: [String: Any], _ area: String?,
                               _ function: String, _ file: String) {
         let message = AppConfig.hasText("log.\(key)") ? AppConfig.text("log.\(key)", values) : key
-        let stamp = ISO8601DateFormatter.string(from: Date(), timeZone: .current,
-                                                formatOptions: [.withInternetDateTime, .withFractionalSeconds])
+        let now = AppLog.stamp()
         let module = file.split(separator: "/").last.map { String($0).replacingOccurrences(of: ".swift", with: "") } ?? file
         queue.async {
-            var line = "\(stamp) \(level) \(module).\(function): \(message)"
+            var line = "\(now) \(level) \(module).\(function): \(message)"
             for s in secrets { line = line.replacingOccurrences(of: s, with: "***") }
             switch level {
             case "ERROR": logger.error("\(line, privacy: .public)")
@@ -127,7 +148,7 @@ enum AppLog {
             let stamp = dayFormatter.string(from: Date()) + "-" + timeFormatter.string(from: Date())
             let aside = url.deletingLastPathComponent().appendingPathComponent("\(stem)-\(stamp).\(url.pathExtension)")
             try? fm.moveItem(at: url, to: aside)
-            let note = "\(Date().formatted(.iso8601)) INFO AppLog.append: " +
+            let note = "\(AppLog.stamp()) INFO AppLog.append: " +
                 AppConfig.text("log.log_rolled", ["bytes": maxBytes, "file": aside.lastPathComponent]) + "\n"
             try? note.data(using: .utf8)?.write(to: url)
         }
@@ -167,6 +188,65 @@ enum AppLog {
     /// Waits for pending writes, so a report includes the latest lines.
     static func flush() async {
         await withCheckedContinuation { cont in queue.async { cont.resume() } }
+    }
+
+    /// The last `count` lines of this app's own log, parsed into the shape GET /v1/debug/logs returns
+    /// (Settings → Logs), oldest first. Reads app.log and, if that is short, the newest rolled app-*.log.
+    static func entries(_ count: Int) async -> [LogEntry] {
+        await flush()
+        let main = current
+        let stem = main.deletingPathExtension().lastPathComponent
+        let rolled = allFiles.filter { $0.lastPathComponent.hasPrefix(stem + "-") }
+        var text = (try? String(contentsOf: main, encoding: .utf8)) ?? ""
+        var parsed = parse(text)
+        if parsed.count < count, let previous = rolled.last {
+            text = ((try? String(contentsOf: previous, encoding: .utf8)) ?? "") + text
+            parsed = parse(text)
+        }
+        return Array(parsed.suffix(count))
+    }
+
+    /// "2026-11-10T08:00:00.123Z WARN APIClient.send(_:): GET /v1/status -> 503 … [req ios-1a2b3c4d]".
+    /// A line that doesn't start with a time belongs to the entry above it.
+    static func parse(_ text: String, source: String = "ios") -> [LogEntry] {
+        var out: [LogEntry] = []
+        let masks: [String] = queue.sync { secrets }
+        for raw in text.components(separatedBy: "\n") {
+            // Lines are masked when written; masking again covers lines from before a secret was registered.
+            var line = raw
+            for s in masks { line = line.replacingOccurrences(of: s, with: "***") }
+            if let entry = parseLine(line, source: source) {
+                out.append(entry)
+            } else if !line.isEmpty {
+                if out.isEmpty {
+                    out.append(LogEntry(ts: nil, level: "", rid: "-", source: source, location: "", message: line))
+                } else {
+                    out[out.count - 1].message += "\n" + line
+                }
+            }
+        }
+        return out
+    }
+
+    private static func parseLine(_ line: String, source: String) -> LogEntry? {
+        let parts = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0].hasSuffix("Z"), parseStamp(String(parts[0])) != nil,
+              !parts[1].isEmpty, parts[1].allSatisfy({ $0.isUppercase }),
+              let colon = parts[2].range(of: ": ") else { return nil }
+        let rest = parts[2]
+        let level = parts[1] == "WARN" ? "WARNING" : String(parts[1])
+        let message = String(rest[colon.upperBound...])
+        return LogEntry(ts: String(parts[0]), level: level, rid: requestId(in: message) ?? "-", source: source,
+                        location: String(rest[..<colon.lowerBound]), message: message)
+    }
+
+    /// The id in "[req ios-1a2b3c4d]", which the gateway logs in its own lines as "[ios-1a2b3c4d]".
+    static func requestId(in message: String) -> String? {
+        guard let open = message.range(of: "[req ") else { return nil }
+        let after = message[open.upperBound...]
+        guard let close = after.firstIndex(of: "]") else { return nil }
+        let rid = String(after[..<close])
+        return rid.isEmpty ? nil : rid
     }
 }
 

@@ -5,10 +5,16 @@ iPhone UI can be exercised without real servers. With simulate=True every
 add starts a download that advances on each queue poll, then imports;
 "His Girl Friday" (TMDB 3085) always fails so the failure/retry UI can be seen.
 Never enabled in production: the gateway logs a loud warning when it is on.
+
+Both servers answer /api/v3/calendar like the real ones: library titles only, filtered by the start/end
+instants, unmonitored ones only with unmonitored=true, and the series only with includeSeries=true.
+With simulate=True the library is seeded with releases around today so the Calendar has something to show.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
+from typing import Any
 
 import httpx
 
@@ -86,6 +92,14 @@ class FakeArr:
         self.discover_ids: list[tuple[int, bool]] = [(1010, True), (1011, True), (1012, False), (1013, True)] if simulate else []
         self._next_id = 100
         self.radarr_spec: dict | None = None   # tests can serve an OpenAPI spec at /docs/v3/openapi.json
+        # Fault injection (tests only; see docs/KNOWN_BUGS_PRD.md).
+        self.timeout_after_post: set[str] = set()   # "movie"/"series": the add is applied, then the call times out
+        self.added_elsewhere: set[str] = set()      # "movie"/"series": another client adds it just before our POST
+        self.lookup_answer: dict[str, Any] = {}     # "radarr"/"sonarr": free-text lookup answers this JSON instead
+        self.empty_library: dict[str, int] = {}     # "radarr"/"sonarr": answer the library call with [] this many times
+        self.raw_answers: dict[str, tuple[int, str]] = {}   # "radarr /api/v3/..." -> (status, non-JSON body)
+        if simulate:
+            self._seed_calendar()
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -105,7 +119,24 @@ class FakeArr:
             if path.startswith(base + "/"):
                 path = path[len(base):]
         body = json.loads(request.content) if request.content else None
-        return (self._radarr if host.startswith("radarr") else self._sonarr)(request.method, path, request.url.params, body)
+        app = "radarr" if host.startswith("radarr") else "sonarr"
+        if f"{app} {path}" in self.raw_answers:
+            status, text = self.raw_answers[f"{app} {path}"]
+            return httpx.Response(status, text=text, headers={"content-type": "text/html"})
+        if path in ("/api/v3/movie", "/api/v3/series") and request.method == "GET" and self.empty_library.get(app):
+            self.empty_library[app] -= 1
+            return httpx.Response(200, json=[])
+        if path in ("/api/v3/movie/lookup", "/api/v3/series/lookup") and app in self.lookup_answer \
+                and not str(request.url.params.get("term", "")).startswith(("tmdb:", "tvdb:")):
+            return httpx.Response(200, json=self.lookup_answer[app])
+        kind = "movie" if app == "radarr" else "series"
+        if request.method == "POST" and path == f"/api/v3/{kind}" and kind in self.added_elsewhere and body:
+            self.added_elsewhere.discard(kind)
+            (self.movies if kind == "movie" else self.series).append({**body, "id": self._id(), "hasFile": False})
+        resp = (self._radarr if app == "radarr" else self._sonarr)(request.method, path, request.url.params, body)
+        if request.method == "POST" and path == f"/api/v3/{kind}" and kind in self.timeout_after_post:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return resp
 
     def _id(self) -> int:
         self._next_id += 1
@@ -141,12 +172,17 @@ class FakeArr:
                 return httpx.Response(400, json=[{"propertyName": "TmdbId", "errorMessage": "'Tmdb Id' must not be empty."}])
             self.posts.append(("movie", body))
             if any(m["tmdbId"] == body["tmdbId"] for m in self.movies):
-                return httpx.Response(400, json=[{"errorMessage": "This movie has already been added"}])
+                return httpx.Response(400, json=[{"propertyName": "TmdbId", "errorMessage": "This movie has already been added"}])
             movie = {**body, "id": self._id(), "hasFile": False}
             self.movies.append(movie)
             if self.simulate:
                 self.radarr_queue.append(self._dl({"movieId": movie["id"]}, fail=body["tmdbId"] in self.fail_tmdb))
             return httpx.Response(201, json=movie)
+        if path == "/api/v3/calendar":
+            start, end, unmonitored = _window(params)
+            return httpx.Response(200, json=[
+                m for m in self.movies if (unmonitored or m.get("monitored"))
+                and any(start <= t <= end for t in (_instant(m.get(f)) for f in ("inCinemas", "digitalRelease", "physicalRelease")) if t)])
         if path == "/api/v3/queue/details":
             if self.simulate:
                 self._tick(self.radarr_queue, "radarr")
@@ -185,6 +221,8 @@ class FakeArr:
             if not body or "tvdbId" not in body:
                 return httpx.Response(400, json=[{"propertyName": "TvdbId", "errorMessage": "'Tvdb Id' must not be empty."}])
             self.posts.append(("series", body))
+            if any(x["tvdbId"] == body["tvdbId"] for x in self.series):
+                return httpx.Response(400, json=[{"propertyName": "TvdbId", "errorMessage": "This series has already been added"}])
             s = {**body, "id": self._id(), "statistics": {"episodeFileCount": 0, "episodeCount": 4}}
             self.series.append(s)
             if self.simulate:
@@ -196,6 +234,19 @@ class FakeArr:
             return httpx.Response(201, json=s)
         if path == "/api/v3/episode":
             return httpx.Response(200, json=[e for e in self.episodes if e["seriesId"] == int(params["seriesId"])])
+        if path == "/api/v3/calendar":
+            start, end, unmonitored = _window(params)
+            shows = {s["id"]: s for s in self.series}
+            out = []
+            for e in self.episodes:
+                when = _instant(e.get("airDateUtc") or e.get("airDate"))
+                show = shows.get(e["seriesId"], {})
+                if not when or not start <= when <= end:
+                    continue
+                if not unmonitored and not (e.get("monitored") and show.get("monitored")):
+                    continue
+                out.append({**e, "series": show} if params.get("includeSeries") == "true" else dict(e))
+            return httpx.Response(200, json=out)
         if path == "/api/v3/queue/details":
             if self.simulate:
                 self._tick(self.sonarr_queue, "sonarr")
@@ -209,6 +260,49 @@ class FakeArr:
             self.commands.append(body)
             return httpx.Response(201, json={"id": 2, **body})
         return httpx.Response(404)
+
+    # ---- calendar seed (dev mode only) --------------------------------------
+    def _seed_calendar(self) -> None:
+        """Films and shows already in the library with releases around today: every release kind, a weekly
+        show at 01:30 UTC (the evening before in the Americas), a season dropped at once, a special,
+        an unmonitored show and a season finale. Names are made up."""
+        today = dt.datetime.now(dt.timezone.utc).date()
+        day = lambda n: (today + dt.timedelta(days=n)).isoformat() + "T00:00:00Z"            # noqa: E731
+        at = lambda n, hm: (today + dt.timedelta(days=n)).isoformat() + f"T{hm}:00Z"         # noqa: E731
+        films = [
+            (2101, "The Lighthouse Keeper", True, False, {"inCinemas": day(3), "digitalRelease": day(24), "physicalRelease": day(40)}),
+            (2102, "Midnight Ferry", True, True, {"inCinemas": day(-60), "digitalRelease": day(-2)}),
+            (2103, "Paper Moons", False, False, {"physicalRelease": day(9)}),
+            (2104, "Northern Lights", True, False, {"inCinemas": day(0), "digitalRelease": day(30)}),
+        ]
+        for tmdb, title, monitored, has_file, dates in films:
+            self.movie_lookup[tmdb] = {"tmdbId": tmdb, "title": title, "year": today.year, "genres": ["Drama"],
+                                       "runtime": 104, "overview": "A made-up film for the dev calendar.", "images": []}
+            self.movies.append({**self.movie_lookup[tmdb], "id": self._id(), "monitored": monitored,
+                                "hasFile": has_file, "qualityProfileId": 1, **dates})
+        shows = [
+            (72001, "Harbour Lights", True, [(1, n, at(-14 + 7 * n, "01:30"), None) for n in range(1, 7)]),
+            (72002, "Glass Houses", True, [(2, n, at(5, "08:00"), None) for n in range(1, 9)]
+             + [(0, 1, at(2, "20:00"), None)]),
+            (72003, "Quiet Fields", False, [(3, 4, at(1, "21:00"), None)]),
+            (72004, "Late Edition", True, [(5, 9, at(5, "02:00"), None), (5, 10, at(12, "02:00"), "season")]),
+        ]
+        for tvdb, title, monitored, episodes in shows:
+            self.series_lookup[tvdb] = {"tvdbId": tvdb, "title": title, "year": today.year, "genres": ["Drama"],
+                                        "network": "Dev TV", "status": "continuing", "runtime": 45,
+                                        "seasons": [{"seasonNumber": 1, "monitored": False}], "images": []}
+            show = {**self.series_lookup[tvdb], "id": self._id(), "monitored": monitored, "qualityProfileId": 7,
+                    "statistics": {"episodeFileCount": 0, "episodeCount": len(episodes)}}
+            self.series.append(show)
+            for season, number, air, finale in episodes:
+                aired = air < at(0, "00:00")
+                ep = {"id": self._id(), "seriesId": show["id"], "seasonNumber": season, "episodeNumber": number,
+                      "title": "Behind the Glass" if season == 0 else f"Chapter {number}", "airDateUtc": air,
+                      "airDate": air[:10], "hasFile": aired, "monitored": monitored}
+                if finale:
+                    ep["finaleType"] = finale
+                self.episodes.append(ep)
+                show["statistics"]["episodeFileCount"] += int(aired)
 
     # ---- download simulation (dev mode only) -------------------------------
     def _dl(self, ids: dict, fail: bool = False, size: float = 1.5e9, speed: float = 0.08) -> dict:
@@ -240,3 +334,21 @@ class FakeArr:
                          errorMessage="Simulated: download client reported the release as corrupt")
             elif q["sizeleft"] == 0:
                 q.update(status="completed", trackedDownloadState="importPending")
+
+
+def _instant(value) -> dt.datetime | None:
+    """A Radarr/Sonarr date or date-time as an aware UTC instant (a bare date is midnight UTC)."""
+    if not value:
+        return None
+    try:
+        when = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=dt.timezone.utc)
+
+
+def _window(params) -> tuple[dt.datetime, dt.datetime, bool]:
+    today = dt.datetime.now(dt.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = _instant(params.get("start")) or today
+    end = _instant(params.get("end")) or today + dt.timedelta(days=2)
+    return start, end, params.get("unmonitored") == "true"

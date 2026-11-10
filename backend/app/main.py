@@ -29,7 +29,8 @@ from pydantic import BaseModel, Field
 
 from .arr import TIMINGS, ArrError
 from .config import ConfigError, cfg, check_paths, data_dir as config_data_dir, data_file, msg, output_dir as config_output_dir
-from .logs import REQUEST_ID, get_logger, log_dir, redact, register_secret, setup_logging
+from .logs import (REQUEST_ID, get_logger, level_number, local_timezone, log_dir, read_log_tail, redact,
+                   register_secret, setup_logging, utc_iso)
 from .db import Database
 from .discovery import SORTS
 from .sources import TitleList
@@ -189,7 +190,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         await gateway.aclose()
 
     web_served = (web_dir / "index.html").is_file()
-    started_at = time.time()
+    started_at = time.monotonic()
     app = FastAPI(title="Phonarr gateway", version=APP_VERSION, lifespan=lifespan)
     app.state.gateway = gateway
     # Compress the web app's JS/CSS and the catalogue JSON: phones on Tailscale over mobile data load ~4x fewer bytes.
@@ -273,7 +274,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         `ok` means the gateway process is serving (Docker uses this). `status` adds Radarr/Sonarr:
         "ok" (every connected server answered), "degraded" (one is unreachable) or "setup" (none connected).
         No URLs, keys or error text here; those need the token (GET /v1/config)."""
-        now = time.time()
+        now = time.monotonic()   # every value below is a duration
         services = {}
         for svc in ("radarr", "sonarr"):
             saved = db.get_service(svc)
@@ -287,7 +288,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         poller = gateway.poller_state()
         status = ("degraded" if poller == "stopped" or any(v["reachable"] is False for v in connected)
                   else "setup" if not connected else "ok")
-        snap_at = gateway.snapshot["generated_at"]
+        snap_at = gateway.snapshot_at
         return {"ok": True, "status": status, "version": APP_VERSION,
                 "uptime_s": round(now - started_at), "web_frontend": web_served,
                 "services": services, "poller": poller,
@@ -338,9 +339,10 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
             "config": gateway.public_config(),
             "defaults": gateway.defaults(),
             "polling": {"interval": gateway.poll_interval(), "polls": gateway.polls,
-                        "last_client_seen_s_ago": round(time.time() - gateway.last_seen, 1) if gateway.last_seen else None,
-                        "snapshot_age_s": round(time.time() - gateway.snapshot["generated_at"], 1)
-                        if gateway.snapshot["generated_at"] else None},
+                        "last_client_seen_s_ago": round(time.monotonic() - gateway.last_seen, 1)
+                        if gateway.last_seen is not None else None,
+                        "snapshot_age_s": round(time.monotonic() - gateway.snapshot_at, 1)
+                        if gateway.snapshot_at is not None else None},
             "services": gateway.snapshot["services"],
             "titles_list": gateway.titles.counts(),
         }
@@ -371,6 +373,18 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
     async def debug_bundle_with_client(body: ClientReport):
         """Same zip, with the caller's log added (the web frontend can't build zips itself)."""
         return zip_response(build_bundle(body))
+
+    @app.get("/v1/debug/logs", dependencies=[Depends(auth)])
+    async def debug_logs(lines: int = Query(cfg("logging.view.default_lines"), ge=1, le=cfg("logging.view.max_lines")),
+                         level: str | None = None, q: str | None = None, rid: str | None = None):
+        """The last lines of gateway.log (and the previous day's file if needed), parsed and redacted, for
+        Settings → Logs. level=WARNING keeps warnings and errors; q is a substring; rid one request id."""
+        if level and level_number(level) is None:
+            raise GatewayError(422, "request", msg("errors.bad_log_level"))
+        entries, truncated = await asyncio.to_thread(read_log_tail, log_dir(output_dir), lines, level or None,
+                                                     q or None, rid or None)
+        return {"lines": entries, "truncated": truncated,
+                "gateway": {"version": APP_VERSION, "timezone": local_timezone(), "now": utc_iso()}}
 
     @app.get("/v1/options", dependencies=[Depends(auth)])
     async def options():
@@ -440,6 +454,12 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
             return Response(status_code=304, headers=headers)
         response.headers.update(headers)
         return {**gateway.snapshot, "next_poll_seconds": interval}
+
+    @app.get("/v1/calendar", dependencies=[Depends(auth)])
+    async def calendar(start: str | None = None, end: str | None = None, tz: str | None = None):
+        """Releases per local day (YYYY-MM-DD, tz = IANA zone). Fetched from Radarr/Sonarr on demand, never polled."""
+        await gateway.ensure_fresh()   # statuses on the entries come from the same snapshot as everywhere else
+        return await gateway.calendar(start, end, tz)
 
     @app.get("/v1/activity", dependencies=[Depends(auth)])
     async def activity(viewing: str | None = "activity"):

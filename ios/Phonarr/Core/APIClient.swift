@@ -172,6 +172,20 @@ final class APIClient: @unchecked Sendable {
         try await send(makeRequest("v1/debug/bundle")).0
     }
 
+    /// The gateway's last log lines, parsed and redacted (Settings → Logs), with the HTTP Date header and the
+    /// send/receive times so the screen can show how far this phone's clock is from the gateway's.
+    func debugLogs(lines: Int, level: String?, rid: String?) async throws -> DebugLogsFetch {
+        var q: [URLQueryItem] = [.init(name: "lines", value: String(lines))]
+        if let level, !level.isEmpty { q.append(.init(name: "level", value: level)) }
+        if let rid, !rid.isEmpty { q.append(.init(name: "rid", value: rid)) }
+        let sentAt = Date()
+        let (data, http) = try await send(makeRequest("v1/debug/logs", query: q))
+        let receivedAt = Date()
+        let body: DebugLogsResponse = try decode(data)
+        return DebugLogsFetch(response: body, dateHeader: http.value(forHTTPHeaderField: "Date"),
+                              sentAt: sentAt, receivedAt: receivedAt)
+    }
+
     /// Last stored API compatibility reports.
     func compatReports() async throws -> CompatReports { try await get("v1/compat") }
 
@@ -233,6 +247,12 @@ final class APIClient: @unchecked Sendable {
     }
 
     func activity() async throws -> ActivityResponse { try await get("v1/activity", query: [.init(name: "viewing", value: "activity")]) }
+
+    /// Releases per local day (start/end "yyyy-MM-dd", tz an IANA zone). Fetched on demand, never polled.
+    func calendar(start: String, end: String, tz: String) async throws -> CalendarResponse {
+        try await get("v1/calendar", query: [.init(name: "start", value: start), .init(name: "end", value: end),
+                                             .init(name: "tz", value: tz)])
+    }
 
     func requestPlan(_ type: MediaType) async throws -> RequestPlan {
         try await get("v1/request-plan", query: [.init(name: "type", value: type.rawValue)])

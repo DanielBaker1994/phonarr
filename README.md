@@ -4,11 +4,12 @@ Discover films and TV shows and add them to your existing Radarr and Sonarr in o
 
 ## Screenshots
 
-The web app on an iPhone 13 (Discover and a title's details) and on a 1440 px desktop browser, running against the simulated Radarr/Sonarr from `./dev.sh` (so posters show placeholders).
+The web app on an iPhone 13 (Discover, a title's details and the Calendar) and on a 1440 px desktop browser, running against the simulated Radarr/Sonarr from `./dev.sh` (so posters show placeholders).
 
 <p>
   <img src="docs/screenshots/iphone-discover.png" alt="Discover on iPhone" width="240" />
   <img src="docs/screenshots/iphone-detail.png" alt="Title details on iPhone" width="240" />
+  <img src="docs/screenshots/iphone-calendar.png" alt="Calendar on iPhone, opened on Today" width="240" />
 </p>
 <img src="docs/screenshots/desktop-movies.png" alt="Movies on a desktop browser" width="720" />
 
@@ -33,7 +34,7 @@ There is one **backend** and two **frontends**. The backend is the only thing th
 | **Web frontend** (main) | `web/` | A PWA: plain HTML, CSS and JavaScript modules, no build step | Served *by the gateway container* at `/`, runs in your browser. Add it to the iPhone home screen and it opens like an app |
 | **iPhone app** (second frontend) | `ios/` | SwiftUI, iOS 17+, no dependencies | On your iPhone, built with Xcode on a Mac |
 
-Both frontends do the same things (Discover, Movies, TV Shows, details, filters, More like this, multi-select, Customize Request, Activity, Settings, API compatibility, System status, debug report) through the same API. Neither ever sees a Radarr or Sonarr API key.
+Both frontends do the same things (Discover, Movies, TV Shows, details, filters, More like this, multi-select, Customize Request, Activity, a Calendar of upcoming and recent releases (Activity → Calendar), Settings, API compatibility, System status, debug report) through the same API. Neither ever sees a Radarr or Sonarr API key.
 
 ## Build and run: one script per target
 
@@ -117,8 +118,9 @@ From a checkout without Docker it is `cd backend && .venv/bin/python -m app expo
 ./test.sh
 ```
 
-- **Gateway** (`backend/tests/`, pytest, 66 tests): the real gateway against a stateful in-memory Radarr and Sonarr. Setup errors, keys never being returned, discovery sources, the request plan, defaults versus one-off overrides, batch requests, duplicate prevention (repeated and concurrent taps), batched status with ETag, progress and import states, retry without a second Arr record, stale status while a service is down, adaptive polling, health status, the web app being served next to the API, redacted debug bundles, that the API console lists every endpoint, and debuggability: outage reasons and up/down transitions in the log, fresh health with no frontend open, one JSON error format with request ids, the poller surviving errors, data folder permission checks, and secrets from files.
-- **Web** (`web/tests/`, `node --test`): the client-side filters and sorts match the gateway's; uncaught errors are captured into the log; every string key used exists.
+- **Gateway** (`backend/tests/`, pytest, 110 tests): the real gateway against a stateful in-memory Radarr and Sonarr. Setup errors, keys never being returned, discovery sources, the request plan, defaults versus one-off overrides, batch requests, duplicate prevention (repeated and concurrent taps), batched status with ETag, progress and import states, retry without a second Arr record, stale status while a service is down, adaptive polling, health status, the web app being served next to the API, redacted debug bundles, that the API console lists every endpoint, and debuggability: outage reasons and up/down transitions in the log, fresh health with no frontend open, one JSON error format with request ids, the poller surviving errors, data folder permission checks, and secrets from files. `test_known_bugs.py` covers bugs similar apps hit (docs/KNOWN_BUGS_PRD.md): adds that time out or race another client, bad lookup and library answers, a clock going backwards, nulls in Arr payloads, specials, and what reaches the log.
+- **Calendar** (`backend/tests/test_calendar.py`, `web/tests/calendar.test.mjs`): release days never shift by timezone, episode times in the viewer's zone, range edges, unknown timezones, daylight saving weekends, connection changes, one server down, season bundles, ordering, specials, live status, and today recomputed from the clock (docs/KNOWN_BUGS_PRD.md KB-12..16, KB-30..36).
+- **Web** (`web/tests/`, `node --test`): the client-side filters and sorts match the gateway's; a lost connection during an add and overlapping poll loops (`store.test.mjs`); uncaught errors are captured into the log; every string key used exists.
 - The iPhone app has no test target yet; it can only be compiled on macOS.
 
 ## Gateway API
@@ -142,12 +144,14 @@ The API console (`/console/`) has a runnable example of each.
 | POST | `/v1/requests/{type}/{id}/retry` | Clear the failed download and search again on the existing record |
 | GET | `/v1/status?viewing=activity\|browse` | All statuses in one payload, with ETag / 304 and `next_poll_seconds` |
 | GET | `/v1/activity` | Items in flight, failed and recently added |
+| GET | `/v1/calendar?start=&end=&tz=` | Releases per local day (film cinema/digital/physical dates, episodes with bundles collapsed), each with its live status; one server down still answers with the other's entries. Fetched on demand, never polled |
 | GET / POST | `/v1/compat`, `/v1/compat/check` | API compatibility report and "Test API" (docs/DEPLOYMENT.md §5.4) |
 | GET / POST | `/v1/debug/bundle` | Redacted gateway logs and state as a zip; POST adds the calling frontend's own log |
+| GET | `/v1/debug/logs?lines=&level=&q=&rid=` | The last gateway log lines (current and previous day), parsed and redacted, for Settings → Logs |
 
 ## Polling
 
-Only the gateway polls Radarr and Sonarr. Each cycle makes one `queue/details` call per app. The library lists are cached for 10 minutes and refreshed after every request. The interval adapts to what the frontends are doing:
+Only the gateway polls Radarr and Sonarr. Each cycle makes one `queue/details` call per app. The Calendar is never polled: it is fetched when the Calendar screen asks, and kept for 2 minutes per range. The library lists are cached for 10 minutes and refreshed after every request. The interval adapts to what the frontends are doing:
 
 | Situation | Interval |
 |---|---|

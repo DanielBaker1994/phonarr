@@ -20,6 +20,7 @@ Every row applies to **both frontends** (the web app and the iPhone app) unless 
 | `Views/FilterViews.swift` | `views/filters.js` |
 | `Views/SimilarViews.swift` | `views/similar.js` |
 | `Views/ActivityView.swift` | `views/activity.js` |
+| `Views/CalendarView.swift`, `Core/CalendarModels.swift` | `views/calendar.js`, `calendar.js` |
 | `Views/SettingsViews.swift` | `views/settings.js` |
 | `Views/CompatView.swift` | `views/compat.js` |
 | `Views/SystemStatusView.swift` | `views/status.js` |
@@ -73,6 +74,7 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | D2 | In progress row after a reload | Comes from Activity, so requested titles stay visible even though the catalogue now hides them | `DiscoverView.inProgress` | 🔧 was built from the catalogue only and emptied after a refresh |
 | D3 | Tap poster | Details (§6) | `PosterCell` | ✅ |
 | D4 | Tap + | Adds with defaults; spinner badge → Searching → progress; toast "Added to library" | `PosterCell.quickAction`, `AppModel.add` | ✅ 📱 check the + doesn't also open details |
+| D4a | + and the connection drops before the gateway answers | The title goes back to how it was (not Failed), toast "Couldn't reach the gateway. It may not have been added; tap + to try again." The next + re-sends the same request (same idempotency key), and the next status poll shows it if the gateway did get it | `AppModel.add`, `web/js/store.js::add` | 🔧 used to show Failed for good and send the next tap to Retry (KB-01) |
 | D5 | + while that server is unreachable | No + shown; the orange banner explains | `PosterCell.quickAction` | 🔧 + used to stay and every tap failed |
 | D6 | + with no usable default | Opens Customize for that title | `PosterCell.quickAction` | ✅ |
 | D7 | Long-press | Add (subtitle: "Uses HD-1080p · /movies"), Customize Request…, Retry on failed | `PosterCell.menu` | ✅ |
@@ -90,7 +92,8 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | G3 | Search 1 character | Local title filter only | `MediaGridView.runSearch` | ✅ |
 | G4 | Search 2+ characters | Local matches, then "From Radarr search" with anything else Radarr/Sonarr can find (debounced 450 ms). Each can be added | `MediaGridView`, `AppModel.search`, `backend/app/service.py::search` | ✅ |
 | G5 | Search finds nothing more | "No other matches for “…”" | `MediaGridView` | ✅ |
-| G6 | Search while Radarr is down | Orange message under the search heading | `MediaGridView` | ✅ |
+| G6 | Search while Radarr is down, or Radarr answers the search with an error or `null` | Orange message under the search heading; the bad answer is never cached, so the next search tries again | `MediaGridView`, `backend/app/service.py::search` | ✅ |
+| G6a | Keep typing while a search is running | The older search is cancelled quietly: no "cancelled" error text, and the spinner never sticks | `MediaGridView.runSearch`, `AppModel.search` | 🔧 iPhone showed the cancellation as an error and could leave the spinner on (KB-05) 📱 |
 | G7 | Tap **Select** (or long-press → Select) | Tab bar hides; checkmark circles appear; title shows "N selected"; Select All / Deselect All; Done | `MediaGridView.toolbar` | ✅ 📱 |
 | G8 | Tap a poster in select mode | Ticks it (haptic). Requested titles are dimmed and can't be ticked; failed ones can (they'll be retried) | `PosterCell` selection branch | ✅ |
 | G9 | Selection bar | "Uses HD-1080p · /movies", **Options…**, **Add N** (or "Retry N" if all are failed) | `MediaGridView.selectionBar` | ✅ |
@@ -138,6 +141,31 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | A2 | Failed row | Message + Retry right in the row | `ActivityRow` | ✅ 📱 check Retry doesn't also open details |
 | A3 | Empty | "No activity" | `ActivityView` | ✅ |
 | A4 | Arr down | Banner, statuses marked "(last known)" | `ServiceBanner`, `StatusLine` | ✅ |
+| A5 | Switching Downloads / Calendar | Segmented switch at the top of Activity; the last choice is remembered per device. Polling for downloads carries on while either is shown | `ActivityView` (Picker `.segmented`), `views/activity.js` | ✅ 📱 |
+
+### 8a. Calendar (Activity → Calendar)
+
+Upcoming and recent releases from Radarr and Sonarr as an agenda: one section per local day, newest at the bottom. Only titles already in Radarr/Sonarr appear (that is what their calendars hold). `GET /v1/calendar` with the device's timezone; never polled. Requirements: docs/KNOWN_BUGS_PRD.md KB-12..16, KB-30..36.
+
+| ID | Situation | Expected | Code | |
+|---|---|---|---|---|
+| CAL1 | Open the Calendar | Opens scrolled to Today with no visible jump (the list is placed before it is drawn). Past days above, future below. Day headers stick under the navigation bar: "Today" (accent), "Tomorrow", "Yesterday", then weekday and date | `CalendarView`, `views/calendar.js` | ✅ web, 📱 iPhone |
+| CAL2 | Loading (first time) | A placeholder (skeleton rows on the web, a spinner on iPhone), never an error while waiting | `Skeleton` / `ProgressView` | ✅ |
+| CAL3 | A film | One row per release kind in range: "In cinemas", "Digital release", "Physical release", on that calendar day in every timezone | `entryLine` / `CalendarDates.line` | ✅ |
+| CAL4 | An episode | "S02E05 · Episode title · 21:00", in the device's timezone. Several episodes of one show on one day: one row "S02E01–E08 · 8 episodes". Specials start with "Special". Premieres and finales get a small tag | same | ✅ |
+| CAL5 | Unmonitored title or episode | Faded, listed after monitored ones that day (series monitoring counts) | `.unmonitored` / `.opacity` | ✅ |
+| CAL6 | Status | "Downloaded" when that release has its file; otherwise a chip for Queued / Downloading n% / Importing / Failed / In library from the live status, so a request or download shows straight away | `Entry`, `CalendarRow` | ✅ |
+| CAL7 | Tap a row | Opens the normal details screen (no popup); Back returns to the same place in the list | `openTitle`, `NavigationLink(value:)` | ✅ |
+| CAL8 | Filters | Films / TV / All, Hide specials, Monitored only. Remembered per device (localStorage / @AppStorage). Web: chips above the list; iPhone: filter menu in the toolbar | `views/calendar.js`, `CalendarView.filterMenu` | ✅ |
+| CAL9 | Today button | Scrolls back to Today | toolbar | ✅ |
+| CAL10 | Show earlier / Show later | Adds 14 days before or after; the list stays where it was | `loadMore` | ✅ |
+| CAL11 | Refresh | Web: refresh button (the web app has no pull to refresh). iPhone: pull to refresh | | ✅ |
+| CAL12 | Left open past midnight, or reopened another day | Today moves to the new day and the calendar reloads (timer at the next local midnight, and a check on becoming visible / scene active) | `dayWatcher`, `.task(id: today)` | ✅ web, 📱 iPhone |
+| CAL13 | Empty | "Nothing in the calendar" (or "Nothing matches these filters"); Today still has a "Nothing today" row | | ✅ |
+| CAL14 | One server down | The other's entries show, with a notice naming the one that failed ("Sonarr: Could not connect…"). Never a full-screen error when there is something to show | `services` in the response | ✅ |
+| CAL15 | Neither server connected | "Connect Radarr or Sonarr in Settings…" with a button to Settings (web) | | ✅ |
+| CAL16 | Offline (gateway unreachable) | First load: "Couldn't load the calendar" + the reason + Try again. Already loaded: the list stays with "Can't reach the gateway. Showing the calendar from earlier." | `failed` / `fail` | ✅ |
+| CAL17 | Browser sent a timezone the gateway doesn't know | Times in UTC, with a notice saying so | `tz_fallback` | ✅ |
 
 ## 9. Settings
 
@@ -150,6 +178,7 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | X5 | Debug report | Share a zip of app + gateway logs (redacted) | `DebugSection` | ✅ |
 | X6 | Disconnect / Sign out | Back to pairing (iPhone) or sign-in (web, asks first) | `AppModel.unpair` | ✅ |
 | X7 | System status | "Everything is up" / "a server is unreachable" / "no server connected"; gateway version, uptime, last refresh, poll interval (or the idle check interval); background poller if not running, last poll error; per server reachable, down for, last checked, version, address, error. Refreshes every 15 s. Web also links to the API console and raw `/v1/health` and lists this browser's recent warnings and errors; iPhone shows the app's version, build and commit | `Views/SystemStatusView.swift`, `web/js/views/status.js`, `backend/app/main.py::health` | ✅ web 📱 iPhone (uncompiled) |
+| X9 | Logs (Settings → Troubleshooting → Logs) | The gateway's last 1,000 log lines (`GET /v1/debug/logs`) and this device's own log merged by UTC time, newest at the bottom, scrolled to the end. Header: gateway version and timezone, this device's timezone, clock difference device vs gateway (from `gateway.now`, else the HTTP `Date` header) with a red warning past `logs.clock_warn_seconds` (120 s). Filters: source (Both / Gateway / This device), level (Everything / Warnings and errors, also sent to the gateway), search (local), tap a request id (`web-…` / `ios-…`, the same id the gateway logs in `[…]`) to show that call on both sides (sent as `rid`, so older gateway lines for it are found too). Copy (web: execCommand fallback on plain HTTP; iPhone: pasteboard), Download `.txt` (web) / Share (iPhone). Gateway unreachable: an error line, this device's lines still show. No log file yet: empty list | `Views/LogsView.swift`, `web/js/views/logs.js` + `web/js/logview.js`, `backend/app/logs.py::read_log_tail` | ✅ web 📱 iPhone (uncompiled) |
 | X8 | A screen crashes while rendering (web) | "This screen hit a bug" panel with the error, Reload and Download debug report; the tab bar stays; going to another tab clears it | `web/js/main.js` `ScreenBoundary` | ✅ web (SwiftUI has no equivalent; crashes are reported by MetricKit) |
 | X8 | Home screen app (web only) | Shows how to Add to Home Screen, or "Running as a home screen app"; notes what HTTPS adds | `web/js/views/settings.js::InstallSection` | ✅ |
 

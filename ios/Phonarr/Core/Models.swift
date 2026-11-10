@@ -435,3 +435,43 @@ struct HealthResponse: Codable {
     var lastPollErrorSAgo: Double? = nil
     var idleHealthCheckS: Double? = nil
 }
+
+// MARK: - Settings → Logs
+
+/// One log line, the same shape on both sides: GET /v1/debug/logs (source "gateway") and this app's
+/// own log parsed by AppLog.parse (source "ios"). `ts` is UTC ISO 8601 with milliseconds and Z.
+struct LogEntry: Decodable, Hashable, Identifiable {
+    var ts: String?
+    var level: String
+    var rid: String
+    var source: String
+    var location: String     // "where" in the JSON: logger.function:line on the gateway, Type.function here
+    var message: String
+    var seq: Int = 0         // position in the merged list, so equal lines still get their own row
+
+    var id: Int { seq }
+
+    enum CodingKeys: String, CodingKey {
+        case ts, level, rid, source, message
+        case location = "where"
+    }
+}
+
+struct DebugLogsResponse: Decodable {
+    struct Gateway: Decodable {
+        var version: String?
+        var timezone: String?
+        var now: String?
+    }
+    let lines: [LogEntry]
+    var truncated: Bool?
+    var gateway: Gateway?
+}
+
+/// What the Logs screen needs besides the lines: the HTTP Date header and when the call went out and came back.
+struct DebugLogsFetch {
+    let response: DebugLogsResponse
+    let dateHeader: String?
+    let sentAt: Date
+    let receivedAt: Date
+}

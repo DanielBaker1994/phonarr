@@ -40,7 +40,7 @@ Gateway state lives in the data folder (`/app/data` in the image, bind-mounted f
 
 Logs are rebuildable output and live apart from the data, in `cache/logs` (`/app/cache/logs` in the image, `backend/cache/logs` in a checkout):
 - redacted logs, all in this one folder, rolled daily and kept 14 days (`logging.retention_days`).
-  - `gateway.log` is the **main file to tail** (`tail -f backend/cache/logs/gateway.log`, or `docker compose exec phonarr tail -f /app/cache/logs/gateway.log`): every line from every module. Each line shows the request id, module, function and line number, e.g. `… WARNING [web-3f2a9c1e] gateway.request_log:235: POST /v1/requests -> 502 in 812ms`. `[-]` means the line didn't come from an API call (poller, startup).
+  - `gateway.log` is the **main file to tail** (`tail -f backend/cache/logs/gateway.log`, or `docker compose exec phonarr tail -f /app/cache/logs/gateway.log`): every line from every module. Each line starts with the time in UTC (ISO 8601 with milliseconds and `Z`) and shows the request id, module, function and line number, e.g. `2026-11-10T08:00:00.123Z WARNING [web-3f2a9c1e] gateway.request_log:235: POST /v1/requests -> 502 in 812ms`. `[-]` means the line didn't come from an API call (poller, startup).
   - `arr.log`, `compat.log`, `sources.log` hold only that logic's lines, for when the main file is too busy.
   - At midnight a file is renamed with the date: `gateway-20261107.log`. Which areas get their own file is the `logging.area_files` setting.
   - Functions with many exit points (requests, retries, refresh) are wrapped in `@traced`, which logs one entry line and one exit line with the duration at `DEBUG` (set `LOG_LEVEL=DEBUG`).
@@ -285,6 +285,8 @@ It goes out through the iOS share sheet (AirDrop, Mail, Messages, Save to Files)
 **Redaction:** Arr API keys and the gateway token are registered as secrets and replaced with `***` in every log line, in the gateway and on the phone. `apikey=`, `X-Api-Key:` and `Bearer …` patterns are also masked. Tests check this (`test_debug_bundle_is_redacted`).
 
 **Server side directly:** `docker logs phonarr`, `cache/logs/gateway.log`, or `curl -H "$H" …/v1/debug/bundle -o x.zip`.
+
+**Reading the logs on the phone:** Settings → Troubleshooting → **Logs** (both frontends) shows the last 1,000 lines of `gateway.log` (and the previous day's file if needed) next to the device's own log, merged by time. Every line on every side is stamped in UTC ISO 8601 with milliseconds (`2026-11-10T08:00:00.123Z`), so they line up whatever timezone the server and phone are in; the header shows both timezones and warns when the phone's clock is more than 2 minutes off the gateway's. Tap a request id to see that call on both sides; Copy or Download/Share what is shown. The same data is at `GET /v1/debug/logs?lines=&level=WARNING&q=&rid=` (redacted, needs the token).
 
 **Following one call through all the logs:** every API call carries a request id. The frontends make one (`web-…` / `ios-…`), send it as `X-Request-Id`, and log it as `[req web-3f2a9c1e]`; the gateway puts the same id on every log line that call causes and returns it in every error (`"request_id"`). An unexpected gateway error tells the user its id, so `grep web-3f2a9c1e gateway.log` finds the traceback.
 

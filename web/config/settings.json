@@ -7,9 +7,19 @@
     "store_debug": false,
     "recent_problems": 20
   },
+  "calendar": {
+    "past_days": 7,
+    "future_days": 30,
+    "more_days": 14,
+    "skeleton_rows": 6
+  },
   "api": {
     "log_body_chars": 300,
     "timeout_ms": 20000,
     "long_timeout_ms": 120000
+  },
+  "logs": {
+    "lines": 1000,
+    "clock_warn_seconds": 120
   }
 }

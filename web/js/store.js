@@ -10,7 +10,7 @@ const listeners = new Set();
 export const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 export function emit() { for (const fn of listeners) fn(); }
 
-const pref = {
+export const pref = {
   get(key, fallback) {
     try { const v = localStorage.getItem(`ayr.${key}`); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
   },

@@ -13,7 +13,7 @@ import os
 import httpx
 
 from .config import cfg, msg
-from .logs import get_logger, register_secret
+from .logs import get_logger, redact, register_secret
 
 log = get_logger("arr")
 
@@ -146,6 +146,10 @@ class ArrClient:
         try:
             return resp.json()
         except ValueError:
+            # Name the call, the status and the start of the body (redacted), so a debug report is enough.
+            log.warning(msg("log.arr_non_json", service=self.service, method=method, path=path, status=status,
+                            type=resp.headers.get("content-type") or "-",
+                            snippet=redact(resp.text[:cfg("arr.log_body_chars")]).replace("\n", " ")))
             raise ArrError(self.service, "config",
                            msg("arr.non_json", url=self.base_url, name=name)) from None
 

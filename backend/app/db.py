@@ -122,7 +122,8 @@ class Database:
             "SELECT payload, fetched_at FROM metadata_cache WHERE media_type=? AND external_id=?",
             (media_type, external_id),
         )
-        if rows and time.time() - rows[0]["fetched_at"] < max_age:
+        # Stored, so wall clock; an entry "from the future" (the clock went back) counts as expired.
+        if rows and 0 <= time.time() - rows[0]["fetched_at"] < max_age:
             return json.loads(rows[0]["payload"])
         return None
 

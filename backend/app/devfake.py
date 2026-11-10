@@ -9,6 +9,7 @@ Never enabled in production: the gateway logs a loud warning when it is on.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import httpx
 
@@ -86,6 +87,12 @@ class FakeArr:
         self.discover_ids: list[tuple[int, bool]] = [(1010, True), (1011, True), (1012, False), (1013, True)] if simulate else []
         self._next_id = 100
         self.radarr_spec: dict | None = None   # tests can serve an OpenAPI spec at /docs/v3/openapi.json
+        # Fault injection (tests only; see docs/KNOWN_BUGS_PRD.md).
+        self.timeout_after_post: set[str] = set()   # "movie"/"series": the add is applied, then the call times out
+        self.added_elsewhere: set[str] = set()      # "movie"/"series": another client adds it just before our POST
+        self.lookup_answer: dict[str, Any] = {}     # "radarr"/"sonarr": free-text lookup answers this JSON instead
+        self.empty_library: dict[str, int] = {}     # "radarr"/"sonarr": answer the library call with [] this many times
+        self.raw_answers: dict[str, tuple[int, str]] = {}   # "radarr /api/v3/..." -> (status, non-JSON body)
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -105,7 +112,24 @@ class FakeArr:
             if path.startswith(base + "/"):
                 path = path[len(base):]
         body = json.loads(request.content) if request.content else None
-        return (self._radarr if host.startswith("radarr") else self._sonarr)(request.method, path, request.url.params, body)
+        app = "radarr" if host.startswith("radarr") else "sonarr"
+        if f"{app} {path}" in self.raw_answers:
+            status, text = self.raw_answers[f"{app} {path}"]
+            return httpx.Response(status, text=text, headers={"content-type": "text/html"})
+        if path in ("/api/v3/movie", "/api/v3/series") and request.method == "GET" and self.empty_library.get(app):
+            self.empty_library[app] -= 1
+            return httpx.Response(200, json=[])
+        if path in ("/api/v3/movie/lookup", "/api/v3/series/lookup") and app in self.lookup_answer \
+                and not str(request.url.params.get("term", "")).startswith(("tmdb:", "tvdb:")):
+            return httpx.Response(200, json=self.lookup_answer[app])
+        kind = "movie" if app == "radarr" else "series"
+        if request.method == "POST" and path == f"/api/v3/{kind}" and kind in self.added_elsewhere and body:
+            self.added_elsewhere.discard(kind)
+            (self.movies if kind == "movie" else self.series).append({**body, "id": self._id(), "hasFile": False})
+        resp = (self._radarr if app == "radarr" else self._sonarr)(request.method, path, request.url.params, body)
+        if request.method == "POST" and path == f"/api/v3/{kind}" and kind in self.timeout_after_post:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return resp
 
     def _id(self) -> int:
         self._next_id += 1
@@ -141,7 +165,7 @@ class FakeArr:
                 return httpx.Response(400, json=[{"propertyName": "TmdbId", "errorMessage": "'Tmdb Id' must not be empty."}])
             self.posts.append(("movie", body))
             if any(m["tmdbId"] == body["tmdbId"] for m in self.movies):
-                return httpx.Response(400, json=[{"errorMessage": "This movie has already been added"}])
+                return httpx.Response(400, json=[{"propertyName": "TmdbId", "errorMessage": "This movie has already been added"}])
             movie = {**body, "id": self._id(), "hasFile": False}
             self.movies.append(movie)
             if self.simulate:
@@ -185,6 +209,8 @@ class FakeArr:
             if not body or "tvdbId" not in body:
                 return httpx.Response(400, json=[{"propertyName": "TvdbId", "errorMessage": "'Tvdb Id' must not be empty."}])
             self.posts.append(("series", body))
+            if any(x["tvdbId"] == body["tvdbId"] for x in self.series):
+                return httpx.Response(400, json=[{"propertyName": "TvdbId", "errorMessage": "This series has already been added"}])
             s = {**body, "id": self._id(), "statistics": {"episodeFileCount": 0, "episodeCount": 4}}
             self.series.append(s)
             if self.simulate:

@@ -189,7 +189,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         await gateway.aclose()
 
     web_served = (web_dir / "index.html").is_file()
-    started_at = time.time()
+    started_at = time.monotonic()
     app = FastAPI(title="Phonarr gateway", version=APP_VERSION, lifespan=lifespan)
     app.state.gateway = gateway
     # Compress the web app's JS/CSS and the catalogue JSON: phones on Tailscale over mobile data load ~4x fewer bytes.
@@ -273,7 +273,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         `ok` means the gateway process is serving (Docker uses this). `status` adds Radarr/Sonarr:
         "ok" (every connected server answered), "degraded" (one is unreachable) or "setup" (none connected).
         No URLs, keys or error text here; those need the token (GET /v1/config)."""
-        now = time.time()
+        now = time.monotonic()   # every value below is a duration
         services = {}
         for svc in ("radarr", "sonarr"):
             saved = db.get_service(svc)
@@ -287,7 +287,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         poller = gateway.poller_state()
         status = ("degraded" if poller == "stopped" or any(v["reachable"] is False for v in connected)
                   else "setup" if not connected else "ok")
-        snap_at = gateway.snapshot["generated_at"]
+        snap_at = gateway.snapshot_at
         return {"ok": True, "status": status, "version": APP_VERSION,
                 "uptime_s": round(now - started_at), "web_frontend": web_served,
                 "services": services, "poller": poller,
@@ -338,9 +338,10 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
             "config": gateway.public_config(),
             "defaults": gateway.defaults(),
             "polling": {"interval": gateway.poll_interval(), "polls": gateway.polls,
-                        "last_client_seen_s_ago": round(time.time() - gateway.last_seen, 1) if gateway.last_seen else None,
-                        "snapshot_age_s": round(time.time() - gateway.snapshot["generated_at"], 1)
-                        if gateway.snapshot["generated_at"] else None},
+                        "last_client_seen_s_ago": round(time.monotonic() - gateway.last_seen, 1)
+                        if gateway.last_seen is not None else None,
+                        "snapshot_age_s": round(time.monotonic() - gateway.snapshot_at, 1)
+                        if gateway.snapshot_at is not None else None},
             "services": gateway.snapshot["services"],
             "titles_list": gateway.titles.counts(),
         }

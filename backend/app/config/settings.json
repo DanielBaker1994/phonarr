@@ -99,7 +99,8 @@
       "idle_health_check": 300
     },
     "down_reminder_every": 3600,
-    "poller_error_backoff": 10
+    "poller_error_backoff": 10,
+    "missing_confirmations": 2
   },
   "arr": {
     "timeout": 15.0,
@@ -113,7 +114,8 @@
     "default_ports": {
       "radarr": 7878,
       "sonarr": 8989
-    }
+    },
+    "log_body_chars": 200
   },
   "http": {
     "gzip_min_bytes": 1024

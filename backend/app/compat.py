@@ -201,7 +201,7 @@ class CompatChecker:
 
     async def fetch_spec(self, service: str, client: ArrClient) -> tuple[dict | None, str | None]:
         cache = self.db.get_setting(f"compat_spec:{service}") or {}
-        if cache.get("version") == client.version and time.time() - cache.get("at", 0) < SPEC_TTL:
+        if cache.get("version") == client.version and 0 <= time.time() - cache.get("at", 0) < SPEC_TTL:
             return cache.get("spec"), cache.get("source")
         spec, source = None, None
         for path in LOCAL_SPEC_PATHS:   # the server's own spec matches its exact version
@@ -227,7 +227,7 @@ class CompatChecker:
         return spec, source
 
     async def run(self, service: str, client: ArrClient) -> dict:
-        started = time.time()
+        started, clock = time.time(), time.monotonic()
         status, data, err = await client.probe("GET", "/api/v3/system/status")
         version = (data or {}).get("version") if status == 200 else None
         if version:
@@ -251,7 +251,7 @@ class CompatChecker:
             features.append({"feature": feat.name, "status": _worst([r["status"] for r in results]), "checks": results})
 
         report = {
-            "service": service, "checked_at": started, "duration_ms": round((time.time() - started) * 1000),
+            "service": service, "checked_at": started, "duration_ms": round((time.monotonic() - clock) * 1000),
             "version": version, "reachable": status is not None and err is None,
             "status": _worst([f["status"] for f in features]),
             "spec_source": spec_source, "spec_note": spec_note, "features": features,

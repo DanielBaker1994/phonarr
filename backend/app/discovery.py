@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Iterable
 
+from .config import cfg
+
 RUNTIME_BUCKETS = {          # minutes
     "short": (0, 59),        # shorts, serials, most TV episodes
     "brisk": (60, 89),
@@ -27,19 +29,76 @@ def _csv(value: str | None) -> list[str]:
     return [v.strip() for v in (value or "").split(",") if v.strip()]
 
 
-def apply_filters(cards: list[dict], f: dict[str, Any]) -> list[dict]:
-    """f keys (all optional): q, genres (csv, any-of), decade, year_min, year_max, runtime (bucket),
-    rating_min, language, studio, collection, certification, status, source."""
+def genre_neighbours(cards: Iterable[dict], min_overlap: float | None = None) -> dict[str, list[dict]]:
+    """For each genre, the genres whose titles overlap with its titles (shared ÷ either, i.e. Jaccard) by at
+    least `min_overlap`, strongest first. Worked out from the pool itself, so a broad genre such as Drama
+    doesn't count as a neighbour of everything."""
+    min_overlap = cfg("discovery.neighbours.min_overlap") if min_overlap is None else min_overlap
+    titles: dict[str, set[int]] = {}
+    for i, c in enumerate(cards):
+        for g in c.get("genres") or []:
+            titles.setdefault(g, set()).add(i)
+    out: dict[str, list[dict]] = {}
+    for a, ta in titles.items():
+        near = []
+        for b, tb in titles.items():
+            if a != b and (both := len(ta & tb)):
+                overlap = both / len(ta | tb)
+                if overlap >= min_overlap:
+                    near.append({"value": b, "overlap": round(overlap, 3)})
+        if near:
+            out[a] = sorted(near, key=lambda n: (-n["overlap"], n["value"]))
+    return out
+
+
+def neighbours_for(picks: Iterable[str], neighbour_map: dict[str, list[dict]], skip: Iterable[str] = ()) -> list[str]:
+    """Neighbouring genres of the picked ones, minus the picks themselves and anything in `skip`."""
+    picks, skip = set(picks), set(skip)
+    best: dict[str, float] = {}
+    for p in picks:
+        for n in neighbour_map.get(p, []):
+            if n["value"] not in picks and n["value"] not in skip:
+                best[n["value"]] = max(best.get(n["value"], 0.0), n["overlap"])
+    return [g for g, _ in sorted(best.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def is_english(card: dict) -> bool:
+    """English only keeps titles whose original language is English, and titles with no language at all
+    (Radarr v3 and Sonarr v3 don't send one), so missing data never hides a title."""
+    lang = (card.get("language") or "").casefold()
+    return not lang or lang in {n.casefold() for n in cfg("discovery.english_names")}
+
+
+def _truthy(value: Any) -> bool:
+    return value is True or str(value).casefold() in ("1", "true", "yes", "on")
+
+
+def apply_filters(cards: list[dict], f: dict[str, Any], neighbour_map: dict[str, list[dict]] | None = None) -> list[dict]:
+    """f keys (all optional): q, genres (csv, any-of), exclude_genres (csv), neighbours (bool: also match the
+    picked genres' neighbours), neighbours_off (csv of neighbours to leave out), english_only (bool),
+    decade, decades (csv), year_min, year_max, runtime (bucket), runtime_min, runtime_max, rating_min,
+    language, studio, collection, certification, status, source."""
     out = cards
     if f.get("q"):
         needle = f["q"].casefold()
         out = [c for c in out if needle in (c["title"] or "").casefold()
                or needle in (c.get("original_title") or "").casefold()]
+    if _truthy(f.get("english_only")):
+        out = [c for c in out if is_english(c)]
+    excluded = set(_csv(f.get("exclude_genres")))
+    if excluded:
+        out = [c for c in out if not excluded & set(c["genres"])]
     genres = set(_csv(f.get("genres")))
     if genres:
+        if _truthy(f.get("neighbours")):
+            nmap = genre_neighbours(cards) if neighbour_map is None else neighbour_map
+            genres |= set(neighbours_for(genres, nmap, excluded | set(_csv(f.get("neighbours_off")))))
         out = [c for c in out if genres & set(c["genres"])]
     if f.get("decade"):
         out = [c for c in out if c.get("decade") == int(f["decade"])]
+    decades = {int(d) for d in _csv(f.get("decades"))}
+    if decades:
+        out = [c for c in out if c.get("decade") in decades]
     if f.get("year_min"):
         out = [c for c in out if (c.get("year") or 0) >= int(f["year_min"])]
     if f.get("year_max"):
@@ -47,6 +106,10 @@ def apply_filters(cards: list[dict], f: dict[str, Any]) -> list[dict]:
     if f.get("runtime") in RUNTIME_BUCKETS:
         lo, hi = RUNTIME_BUCKETS[f["runtime"]]
         out = [c for c in out if c.get("runtime") and lo <= c["runtime"] <= hi]
+    if f.get("runtime_min"):
+        out = [c for c in out if (c.get("runtime") or 0) >= int(f["runtime_min"])]
+    if f.get("runtime_max"):
+        out = [c for c in out if c.get("runtime") and c["runtime"] <= int(f["runtime_max"])]
     if f.get("rating_min"):
         out = [c for c in out if (c.get("rating") or 0) >= float(f["rating_min"])]
     for key, field in (("language", "language"), ("studio", "studio"), ("collection", "collection"),
@@ -55,6 +118,26 @@ def apply_filters(cards: list[dict], f: dict[str, Any]) -> list[dict]:
         if f.get(key):
             out = [c for c in out if (c.get(field) or "").casefold() == f[key].casefold()]
     return out
+
+
+def trusted_rating(sources: dict[str, dict], media_type: str) -> float | None:
+    """One rating to sort and filter by. The configured sources (IMDb and TMDB for films) are averaged by vote
+    count, then pulled towards `prior_mean` when there are few votes:
+    (votes x average + prior_votes x prior_mean) / (votes + prior_votes).
+    Sources with a value but no vote count are averaged plainly. Falls back to the other sources in order."""
+    conf = cfg("discovery.trusted_rating")
+    for group in (conf["sources"], conf["fallback_sources"]):
+        found = [(float(sources[s]["value"]), int(sources[s].get("votes") or 0))
+                 for s in group if (sources.get(s) or {}).get("value")]
+        if not found:
+            continue
+        votes = sum(v for _, v in found)
+        if not votes:
+            return round(sum(x for x, _ in found) / len(found), 1)
+        average = sum(x * v for x, v in found) / votes
+        prior = conf["prior_votes"][media_type]
+        return round((votes * average + prior * conf["prior_mean"]) / (votes + prior), 1)
+    return None
 
 
 def sort_cards(cards: list[dict], sort: str | None) -> list[dict]:
@@ -99,6 +182,10 @@ def facets(cards: Iterable[dict]) -> dict:
     }
     out = {k: v for k, v in out.items() if len(v) >= 2 or k in ("genres", "decades")}
     out["rated"] = sum(1 for c in cards if c.get("rating") is not None)
+    out["genre_neighbours"] = genre_neighbours(cards)
+    years = [c["year"] for c in cards if c.get("year")]
+    out["years"] = {"min": min(years), "max": max(years)} if years else None
+    out["non_english"] = sum(1 for c in cards if not is_english(c))
     return out
 
 

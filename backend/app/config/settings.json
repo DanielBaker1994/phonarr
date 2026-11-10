@@ -151,6 +151,31 @@
   "http": {
     "gzip_min_bytes": 1024
   },
+  "discovery": {
+    "trusted_rating": {
+      "sources": [
+        "imdb",
+        "tmdb"
+      ],
+      "fallback_sources": [
+        "trakt",
+        "tvdb"
+      ],
+      "prior_mean": 6.5,
+      "prior_votes": {
+        "movie": 25000,
+        "series": 20
+      }
+    },
+    "neighbours": {
+      "min_overlap": 0.15
+    },
+    "english_names": [
+      "English"
+    ],
+    "default_sort": "rating",
+    "page_size_max": 500
+  },
   "env": {
     "logging.level": "LOG_LEVEL",
     "gateway.batch_max": "BATCH_MAX",

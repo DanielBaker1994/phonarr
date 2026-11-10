@@ -236,6 +236,10 @@ body:has(.page.selecting) .tabbar { display: none; }
 .cell-text { min-width: 0; }
 .cell-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-rating { margin-left: 6px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cell-sub:empty { display: none; }
+.rating-strip { display: flex; gap: 6px; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
+.rating-strip b { color: var(--text); font-weight: 600; }
 .scroller .cell { width: var(--w, 124px); }
 
 .poster {
@@ -290,6 +294,11 @@ body:has(.page.selecting) .tabbar { display: none; }
 .chip.on { background: var(--accent); color: var(--accent-ink); }
 .chip.small { padding: 5px 10px; font-size: 12px; font-weight: 500; background: var(--accent-soft); color: var(--text); }
 .chip-count { color: var(--muted); font-size: 12px; }
+.chip.excluded { background: var(--bad-soft); color: var(--bad); text-decoration: line-through; }
+.chip.neighbour { background: none; box-shadow: inset 0 0 0 1px var(--border); border-radius: 99px; }
+.chip.neighbour.on { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
+.via { color: var(--info); }
+.load-more { display: flex; justify-content: center; padding: 16px; }
 .chip.on .chip-count { color: inherit; opacity: 0.7; }
 
 .menu-anchor { position: relative; display: inline-flex; }

@@ -16,7 +16,7 @@ Richness: ●●● present for nearly every title · ●●○ usually present,
 | `certification` | ●○○ | US rating (G/PG/…). **Missing for most pre-1968 films**, since the MPAA system started in 1968 | Filter shown only when it has 2+ values |
 | `studio` | ●●○ | Production company name | Studio filter, similarity |
 | `originalLanguage {id,name}` | ●●● | v4+ | Language filter, similarity |
-| `ratings {imdb, tmdb, metacritic, rottenTomatoes, trakt}` each `{value, votes}` | ●●○ / ●○○ | IMDb and TMDB usually present. RT and Metacritic rare for old films. Radarr v3 has a single `{value, votes}` | Rating filter and sort, tie-breaker |
+| `ratings {imdb, tmdb, metacritic, rottenTomatoes, trakt}` each `{value, votes}` | ●●○ / ●○○ | IMDb and TMDB usually present. RT and Metacritic rarer. Radarr v3 has a single `{value, votes}` | Trusted rating (IMDb + TMDB by votes), rating strip on posters, rating filter and sort |
 | `popularity` | ●●○ | TMDB popularity score: recency-biased and noisy | "Popular" sort only |
 | `collection {title, tmdbId}` | ●○○ | Franchises or series, e.g. "Nosferatu Collection". Rare for older titles | "Part of …" similarity, a strong signal when present |
 | `keywords[]` | ●○○ | Present on recent Radarr builds only. Themes like "zombie", "film noir" | Similarity when present ("Similar themes") |
@@ -82,7 +82,17 @@ Each entry also carries `status` from the gateway's status snapshot (the same on
 ## Filters the frontends offer
 Both frontends filter and sort the discovery pool on the device for instant results, with the same rules in three places that must stay in step: `backend/app/discovery.py` (the gateway's `/v1/discover` parameters), `web/js/filters.js` (web, tested by `web/tests/filters.test.mjs`) and `ios/Phonarr/Core/Filters.swift` (iPhone). Facets (which filters to show and their counts) always come from the gateway.
 
-Sort by title, newest, oldest, highest rated, most popular, shortest, longest, or recently added. Filter by genre (multi-select, any-of), decade, runtime band (under 60 / 60–89 / 90–119 / 120+ minutes), minimum rating, language, studio or network, collection, certification, series status, and where it was found (titles list, import lists, Radarr recommendations, search). A filter is shown only when the current set has at least two values for it, so there are no dead filters.
+**Defaults:** highest rated first, English only on. Every match is reachable: the grids show a page at a time (`filters.page_size`, 60) and add the next page as you scroll; the gateway's `/v1/discover` takes `page` and `page_size` and always returns `matched`, the full count.
+
+- **Trusted rating** (`rating` on every card, used by sorting, the minimum-rating filter, shelves and similarity). Worked out in one place, `discovery.trusted_rating`: IMDb and TMDB averaged by vote count, then pulled towards `prior_mean` (6.5) by `prior_votes` (25,000 for films, 20 for TV, whose single Sonarr score has far fewer votes): `(votes × average + prior_votes × prior_mean) ÷ (votes + prior_votes)`. Trakt, then TVDB, are the fallback when neither has a value; a score with no vote count is averaged plainly. All in `discovery.trusted_rating` in settings.json. Each card also carries `ratings` (every source's own score: IMDb, TMDB, Rotten Tomatoes, Metacritic, Trakt, TVDB) and `votes`; the poster shows the trusted rating and a small strip of the sources.
+- **English only** keeps titles whose `originalLanguage` is English (`discovery.english_names`), and titles with no language at all (Radarr v3 and Sonarr v3 send none), so missing data never hides a title. When it's off, the Language picker appears.
+- **Genres:** tap once to include (any-of), again to exclude. An excluded genre always wins.
+- **Neighbouring genres:** once a genre is picked, genres whose titles overlap with it by at least 15% (`discovery.neighbours.min_overlap`; titles in both ÷ titles in either, worked out from the pool and sent as `facets.genre_neighbours`) count as matches too. Using overlap rather than "share of the pick's titles" stops a broad genre like Drama from being everyone's neighbour. On by default, each one can be dropped, and a card that matched only through one says "via Thriller".
+- **Year:** Any, Decades (several at once) or an exact Range such as 2005–2010, inclusive; one at a time, and switching clears the other. `facets.years` gives the range's bounds.
+- **Length:** at least / at most, in minutes (`filters.runtime_steps`). A title with no runtime is hidden only when "at most" is set.
+- **Also:** minimum rating, studio or network, collection, certification, series status, where it was found. Sort can switch to title, newest, oldest, most popular, shortest, longest or recently added.
+
+A filter is shown only when the current set has at least two values for it, so there are no dead filters. The gateway still accepts the older `decade` and `runtime` (band) parameters.
 
 Discover also builds shelves automatically from the same data: "Before 1930", one per decade, the top genres, "Under 90 minutes" and "Highest rated".
 

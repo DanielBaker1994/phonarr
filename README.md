@@ -135,7 +135,7 @@ The API console (`/console/`) has a runnable example of each.
 | PUT / DELETE | `/v1/config/{radarr\|sonarr}` | Test, then save / forget a connection |
 | GET | `/v1/options` | Quality profiles, root folders, saved defaults |
 | PUT | `/v1/defaults` | Save the default profiles, folders and season choice |
-| GET | `/v1/discover?type=movie\|series&q=&genres=&decade=&sort=…` | Titles not already owned or requested, filter facets, and the `request_plan` |
+| GET | `/v1/discover?type=movie\|series&q=&genres=&exclude_genres=&neighbours=&english_only=&decades=&year_min=&year_max=&runtime_min=&runtime_max=&rating_min=&sort=&page=&page_size=…` | Titles not already owned or requested (highest trusted rating first, every match reachable by page), filter facets, and the `request_plan` |
 | GET | `/v1/titles/{type}/{id}` | Details, status, per-episode progress, and the `request_plan` |
 | GET | `/v1/titles/{type}/{id}/similar?mix=true` | "More like this", ranked with reasons |
 | POST | `/v1/requests` | One-tap add (optional one-off `quality_profile_id` / `root_folder` / `season_monitor`) |

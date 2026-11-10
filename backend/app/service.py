@@ -68,18 +68,25 @@ def _image(images: list[dict] | None, cover: str) -> str | None:
     return None
 
 
-def _movie_ratings(m: dict) -> dict:
+def _movie_ratings(m: dict) -> dict[str, dict]:
     """Radarr v4+/v5: {imdb:{value,votes}, tmdb:{...}, metacritic:{...}, rottenTomatoes:{...}, trakt:{...}};
-    Radarr v3: {value, votes}. Returns {source: value} for sources that have votes or a value."""
+    Radarr v3: a single {value, votes}, treated as TMDB. Returns {source: {value, votes}} for sources with a value."""
     r = m.get("ratings") or {}
     if "value" in r:
-        return {"tmdb": r["value"]} if r.get("value") else {}
+        return {"tmdb": {"value": r["value"], "votes": r.get("votes") or 0}} if r.get("value") else {}
     out = {}
     for src in ("imdb", "tmdb", "trakt", "rottenTomatoes", "metacritic"):
         v = (r.get(src) or {}).get("value")
         if v:
-            out[src] = v
+            out[src] = {"value": v, "votes": (r.get(src) or {}).get("votes") or 0}
     return out
+
+
+def _rating_fields(sources: dict[str, dict], media_type: str) -> dict:
+    """rating: the trusted rating (discovery.trusted_rating); ratings: {source: value}; votes: {source: votes}."""
+    return {"rating": discovery.trusted_rating(sources, media_type),
+            "ratings": {k: v["value"] for k, v in sources.items()},
+            "votes": {k: v["votes"] for k, v in sources.items() if v.get("votes")}}
 
 
 def _lang(x: dict) -> str | None:
@@ -93,13 +100,10 @@ def _keywords(x: dict) -> list[str]:
 
 
 def normalize_movie(m: dict) -> dict:
-    ratings = _movie_ratings(m)
-    rating = ratings.get("tmdb") or ratings.get("imdb") or ratings.get("trakt")
     collection = m.get("collection") or {}
     return {
         "decade": (m["year"] // 10) * 10 if m.get("year") else None,
-        "rating": round(float(rating), 1) if rating else None,
-        "ratings": ratings,
+        **_rating_fields(_movie_ratings(m), "movie"),
         "popularity": m.get("popularity"),
         "language": _lang(m),
         "collection": collection.get("title") or collection.get("name"),
@@ -119,8 +123,8 @@ def normalize_series(s: dict) -> dict:
     r = s.get("ratings") or {}
     return {
         "decade": (s["year"] // 10) * 10 if s.get("year") else None,
-        "rating": round(float(r["value"]), 1) if r.get("value") else None,
-        "ratings": {"tvdb": r["value"]} if r.get("value") else {},
+        **_rating_fields({"tvdb": {"value": r["value"], "votes": r.get("votes") or 0}} if r.get("value") else {},
+                         "series"),
         "popularity": None,
         "language": _lang(s),
         "collection": None,
@@ -474,8 +478,8 @@ class Gateway:
 
     # --------------------------------------------------------------- discovery
     CARD_FIELDS = ("type", "id", "title", "original_title", "year", "decade", "genres", "poster", "overview",
-                   "runtime", "rating", "popularity", "language", "studio", "collection", "certification",
-                   "keywords", "series_status")
+                   "runtime", "rating", "ratings", "votes", "popularity", "language", "studio", "collection",
+                   "certification", "keywords", "series_status")
 
     def _card(self, meta: dict, source: str, added: str | None = None) -> dict:
         return {**{k: meta.get(k) for k in self.CARD_FIELDS}, "source": source, "added": added,
@@ -575,9 +579,9 @@ class Gateway:
 
     @traced
     async def discover(self, media_type: str, filters: dict | None = None, include_tracked: bool = False,
-                       sort: str | None = None) -> dict:
+                       sort: str | None = None, page: int | None = None, page_size: int | None = None) -> dict:
         if SERVICE_FOR[media_type] not in self.clients:
-            return {"items": [], "genres": [], "facets": {}, "total": 0, "error": None, "configured": False,
+            return {"items": [], "genres": [], "facets": {}, "total": 0, "matched": 0, "error": None, "configured": False,
                     "searched": False, "request_plan": None}
         filters = dict(filters or {})
         cards, service_error = await self.pool_cards(media_type)
@@ -598,12 +602,19 @@ class Gateway:
             found = [c for c in found if c["status"]["state"] == "not_requested"]
         all_facets = discovery.facets(cards)       # facets describe the unfiltered set
         total = len(cards)
-        matched = discovery.apply_filters(cards, filters)
+        neighbours = all_facets["genre_neighbours"]
+        matched = discovery.apply_filters(cards, filters, neighbours)
         # Lookup results already match the search term (often by an alternate title): filter on everything else.
-        matched += discovery.apply_filters(found, {**filters, "q": None})
-        items = discovery.sort_cards(matched, sort)
+        matched += discovery.apply_filters(found, {**filters, "q": None}, neighbours)
+        items = discovery.sort_cards(matched, sort or cfg("discovery.default_sort"))
+        paging = {}
+        if page_size:   # no cap: every match is reachable, one page at a time
+            page = max(1, page or 1)
+            paging = {"page": page, "page_size": page_size}
+            items = items[(page - 1) * page_size:page * page_size]
         return {"items": items, "genres": [f["value"] for f in all_facets.get("genres", [])],
-                "facets": all_facets, "total": total, "error": service_error, "configured": True,
+                "facets": all_facets, "total": total, "matched": len(matched), **paging,
+                "error": service_error, "configured": True,
                 "searched": searched, "request_plan": await self.request_plan(media_type)}
 
     @traced

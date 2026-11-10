@@ -87,8 +87,8 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 
 | ID | Situation | Expected | Code | |
 |---|---|---|---|---|
-| G1 | Browse | Poster grid with + on each, sort menu, filter sheet, removable chips with "N of M" | `MediaGridView`, `Views/FilterViews.swift` | ✅ |
-| G2 | Filters | Genre (any-of), decade, runtime, minimum rating, language, studio/network, collection, certification, series status, **Found in** (titles list, import lists, Radarr recommendations, search) | `FilterSheet`, `Core/Filters.swift` | ✅ |
+| G1 | Browse | Poster grid with + on each, sort menu, filter sheet, removable chips with "N of M". Each poster shows the trusted rating and a small strip of IMDb / TMDB / RT / Meta (TVDB for shows). No cap: a page at a time (60), the next added as you scroll, with a Show more button | `MediaGridView`, `Views/FilterViews.swift`, `web/js/views/browse.js` | ✅ |
+| G2 | Filters | English only (on by default; titles with no language kept), genres (tap: include, again: exclude) with neighbouring genres (overlap ≥ 15%, each can be dropped, cards say "via …"), year as Any / Decades (several) / exact Range, length at least / at most, minimum trusted rating, language (when English only is off), studio/network, collection, certification, series status, **Found in**. Default sort: highest rated. Reset returns to these defaults | `FilterSheet`, `Core/Filters.swift`, `web/js/filters.js` | ✅ web 📱 iPhone (uncompiled) |
 | G3 | Search 1 character | Local title filter only | `MediaGridView.runSearch` | ✅ |
 | G4 | Search 2+ characters | Local matches, then "From Radarr search" with anything else Radarr/Sonarr can find (debounced 450 ms). Each can be added | `MediaGridView`, `AppModel.search`, `backend/app/service.py::search` | ✅ |
 | G5 | Search finds nothing more | "No other matches for “…”" | `MediaGridView` | ✅ |

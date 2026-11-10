@@ -9,7 +9,8 @@
       "arr": "arr.log",
       "compat": "compat.log",
       "sources": "sources.log",
-      "datafiles": "datafiles.log"
+      "datafiles": "datafiles.log",
+      "calendar": "calendar.log"
     },
     "trace_level": "DEBUG",
     "quiet_loggers": [
@@ -100,6 +101,13 @@
     },
     "down_reminder_every": 3600,
     "poller_error_backoff": 10
+  },
+  "calendar": {
+    "default_past_days": 7,
+    "default_future_days": 30,
+    "max_days": 92,
+    "pad_days": 1,
+    "cache_ttl": 120
   },
   "arr": {
     "timeout": 15.0,

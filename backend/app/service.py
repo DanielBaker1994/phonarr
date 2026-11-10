@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from . import calendar as calendar_feed
 from . import discovery
 from .compat import CompatChecker
 from .arr import ArrClient, ArrError, normalize_base_url
@@ -200,6 +201,7 @@ class Gateway:
         self.auto_compat = True
         self.poller_task: asyncio.Task | None = None
         self.last_poll_error_at: float | None = None
+        self.calendar_cache = calendar_feed.CalendarCache()   # GET /v1/calendar only; never polled
 
     # ------------------------------------------------------------------ config
     async def load_clients(self) -> None:
@@ -215,6 +217,7 @@ class Gateway:
         self._library.pop(service, None)
         self._options.pop(service, None)
         self._search_cache.clear()
+        self.calendar_cache.clear(service)
         if service == "radarr":
             self._discover_cache = None
         if old:
@@ -276,6 +279,7 @@ class Gateway:
         self._service_health.pop(service, None)
         client = self.clients.pop(service, None)
         self._library.pop(service, None)
+        self.calendar_cache.clear(service)
         self._options.pop(service, None)
         self._queue[service] = []
         if client:
@@ -767,6 +771,7 @@ class Gateway:
                                                             "message": e.message, "error_kind": kind})
             raise GatewayError(503 if kind == "unavailable" else 422 if kind == "config" else 502, kind, e.message)
         self._library.pop(service, None)
+        self.calendar_cache.clear(service)
         await self.refresh_status()
         self.wake.set()
         return self._request_result(media_type, external_id, deduplicated=False)
@@ -849,6 +854,14 @@ class Gateway:
         rec = self.db.get_request(media_type, external_id) or {}
         return {"type": media_type, "id": external_id, "arr_id": rec.get("arr_id"),
                 "deduplicated": deduplicated, "status": self.status_for(media_type, external_id)}
+
+    # ---------------------------------------------------------------- calendar
+    async def calendar(self, start: str | None = None, end: str | None = None, tz: str | None = None) -> dict:
+        """Upcoming and recent releases in the viewer's local days (app/calendar.py). On demand only."""
+        try:
+            return await calendar_feed.build(self, start, end, tz, image=_image)
+        except calendar_feed.CalendarError as e:
+            raise GatewayError(422, "request", str(e))
 
     # ------------------------------------------------------------------ status
     def status_for(self, media_type: str, external_id: int) -> dict:

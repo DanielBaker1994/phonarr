@@ -441,6 +441,12 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         response.headers.update(headers)
         return {**gateway.snapshot, "next_poll_seconds": interval}
 
+    @app.get("/v1/calendar", dependencies=[Depends(auth)])
+    async def calendar(start: str | None = None, end: str | None = None, tz: str | None = None):
+        """Releases per local day (YYYY-MM-DD, tz = IANA zone). Fetched from Radarr/Sonarr on demand, never polled."""
+        await gateway.ensure_fresh()   # statuses on the entries come from the same snapshot as everywhere else
+        return await gateway.calendar(start, end, tz)
+
     @app.get("/v1/activity", dependencies=[Depends(auth)])
     async def activity(viewing: str | None = "activity"):
         gateway.note_client(viewing)

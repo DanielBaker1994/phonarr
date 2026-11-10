@@ -1145,3 +1145,13 @@ def test_cli_streams_export_and_import(tmp_path, monkeypatch, capsysbinary):
     assert (b / "titles.json").read_text() == "[1]"
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(zipped)))
     assert main(["import-data", "-"]) == 1                   # now has data: needs --replace
+
+
+# ------------------------------------------------------------------ calendar (more in test_calendar.py)
+def test_calendar_route_needs_token_and_uses_the_error_envelope(client):
+    assert client.get("/v1/calendar").json()["error"]["kind"] == "auth"
+    r = client.get("/v1/calendar?start=2026-11-10&end=2026-11-01", headers=AUTH)
+    assert r.status_code == 422 and r.json()["error"]["kind"] == "request" and r.json()["error"]["request_id"]
+    body = client.get("/v1/calendar?start=2026-11-10&end=2026-11-11&tz=Europe/London", headers=AUTH).json()
+    assert [d["date"] for d in body["days"]] == ["2026-11-10", "2026-11-11"]
+    assert body["services"]["radarr"]["configured"] is False and body["services"]["sonarr"]["configured"] is False

@@ -88,6 +88,15 @@
     "server_error": "The server answered with its own error (HTTP {status}), so fields couldn't be checked: {message}. This is usually not an API change; check System → Status in that app.",
     "http_status": "HTTP {status}. {message}"
   },
+  "calendar": {
+    "bad_date": "{field} must be a date like 2026-11-10.",
+    "end_before_start": "end must be on or after start.",
+    "too_long": "The calendar shows at most {max} days at a time.",
+    "not_a_list": "{name} answered the calendar call with something that isn't a list. Is it still starting up?",
+    "tz_fallback": "Unknown timezone {tz!r} from the client; using UTC",
+    "fetch_failed": "{service} calendar failed: {error}",
+    "built": "Calendar {start}..{end} in {tz}: {items} entries"
+  },
   "datafiles": {
     "exported": "Exported {files} files ({bytes} bytes) from {data} to {dest}",
     "imported": "Imported {files} files ({bytes} bytes) into {data}",

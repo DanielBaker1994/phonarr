@@ -88,6 +88,12 @@ RADARR = [
               fields=["[].id", "[].movieId", "[].size", "[].sizeleft", "[].status"],
               optional=["[].trackedDownloadState", "[].trackedDownloadStatus", "[].errorMessage", "[].statusMessages"]),
     ]),
+    Feature("Calendar", [
+        Check("Calendar", "GET", "/api/v3/calendar", params={"unmonitored": "true"},
+              optional=["[].tmdbId", "[].title", "[].monitored", "[].hasFile", "[].inCinemas", "[].digitalRelease",
+                        "[].physicalRelease", "[].images", "[].year"],
+              query_params=["start", "end", "unmonitored"]),
+    ]),
     Feature("Adding films", [
         Check("Add movie", "POST", "/api/v3/movie", write=True,
               request_fields=["tmdbId", "title", "qualityProfileId", "rootFolderPath", "monitored",
@@ -126,6 +132,13 @@ SONARR = [
               fields=["[].id", "[].seriesId", "[].size", "[].sizeleft", "[].status"],
               optional=["[].episodeId", "[].trackedDownloadState", "[].trackedDownloadStatus", "[].errorMessage"]),
         Check("Episodes", "GET", "/api/v3/episode", spec_only=True, query_params=["seriesId"]),
+    ]),
+    Feature("Calendar", [
+        Check("Calendar", "GET", "/api/v3/calendar", params={"unmonitored": "true", "includeSeries": "true"},
+              optional=["[].seasonNumber", "[].episodeNumber", "[].title", "[].airDateUtc", "[].airDate",
+                        "[].monitored", "[].hasFile", "[].finaleType", "[].series.tvdbId", "[].series.title",
+                        "[].series.monitored", "[].series.images"],
+              query_params=["start", "end", "unmonitored", "includeSeries"]),
     ]),
     Feature("Adding shows", [
         Check("Add series", "POST", "/api/v3/series", write=True,

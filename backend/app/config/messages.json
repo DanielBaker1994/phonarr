@@ -11,6 +11,7 @@
     "auth": "Invalid or missing gateway token.",
     "unknown_service": "Unknown service",
     "bad_sort": "sort must be one of {sorts}",
+    "bad_log_level": "level must be a log level such as WARNING or ERROR",
     "internal": "Something went wrong in the gateway (request {request_id}). The gateway log has the details: Settings → Troubleshooting → Download debug report.",
     "validation": "Invalid request: {details}",
     "not_found_path": "Not found.",

@@ -903,6 +903,130 @@ def test_log_lines_carry_request_id(tmp_path):
     assert "[rid42] gateway" in text and "[-] gateway" in text
 
 
+def test_log_lines_are_utc_iso(tmp_path):
+    """KB-11: gateway lines start with UTC ISO 8601 + ms + Z, like the web log's toISOString()."""
+    import logging
+    import re
+
+    from app.logs import log_dir, setup_logging
+    setup_logging(tmp_path, "INFO")
+    before = dt.datetime.now(dt.timezone.utc)
+    logging.getLogger("gateway").info("what time is it")
+    for h in logging.getLogger().handlers:
+        h.flush()
+    line = next(l for l in (log_dir(tmp_path) / "gateway.log").read_text().splitlines() if "what time is it" in l)
+    m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3})Z ", line)
+    assert m, f"not a UTC ISO timestamp: {line!r}"
+    stamp = dt.datetime.fromisoformat(m.group(1)).replace(tzinfo=dt.timezone.utc)
+    assert abs((stamp - before).total_seconds()) < 5   # UTC, not local time with a Z stuck on
+
+
+# ------------------------------------------------------------------ GET /v1/debug/logs (Settings → Logs)
+def _write_log(tmp_path, name, lines):
+    from app.logs import log_dir
+    (log_dir(tmp_path) / name).write_text("".join(l + "\n" for l in lines), encoding="utf-8")
+
+
+def _log_line(i, level="INFO", rid="-", text=None):
+    return f"2026-11-10T08:{i // 60:02d}:{i % 60:02d}.{i % 1000:03d}Z {level} [{rid}] gateway.work:12: {text or f'line {i}'}"
+
+
+def test_debug_logs_tail_count_and_shape(client, tmp_path):
+    _write_log(tmp_path, "gateway.log", [_log_line(i) for i in range(50)])
+    r = client.get("/v1/debug/logs?lines=10", headers=AUTH)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [l["message"] for l in body["lines"]] == [f"line {i}" for i in range(40, 50)]   # oldest first, newest last
+    assert body["truncated"] is True
+    first = body["lines"][0]
+    assert first == {"ts": "2026-11-10T08:00:40.040Z", "level": "INFO", "rid": "-", "source": "gateway",
+                     "where": "gateway.work:12", "message": "line 40"}
+    assert set(body["gateway"]) == {"version", "timezone", "now"} and body["gateway"]["now"].endswith("Z")
+    assert client.get("/v1/debug/logs?lines=100", headers=AUTH).json()["truncated"] is False
+    assert client.get("/v1/debug/logs").status_code == 401
+    r = client.get("/v1/debug/logs?lines=999999", headers=AUTH)
+    assert r.status_code == 422 and "request_id" in r.json()["error"]
+
+
+def test_debug_logs_reads_previous_day_and_legacy_lines(client, tmp_path):
+    _write_log(tmp_path, "gateway-20261109.log", ["2026-11-09 23:59:59,500 INFO [-] gateway.work:3: old format"]
+               + [_log_line(i, text=f"yesterday {i}") for i in range(3)])
+    _write_log(tmp_path, "gateway.log", [_log_line(i) for i in range(2)])
+    body = client.get("/v1/debug/logs?lines=6", headers=AUTH).json()
+    lines = body["lines"]
+    assert [l["message"] for l in lines] == ["old format", "yesterday 0", "yesterday 1", "yesterday 2", "line 0", "line 1"]
+    assert lines[0]["ts"].endswith(".500Z") and lines[0]["level"] == "INFO" and body["truncated"] is False
+    assert client.get("/v1/debug/logs?lines=5", headers=AUTH).json()["truncated"] is True
+
+
+def test_debug_logs_level_rid_and_search_filters(client, tmp_path):
+    _write_log(tmp_path, "gateway.log", [
+        _log_line(1, "INFO", "web-aaaa1111", "GET /v1/status -> 200"),
+        _log_line(2, "WARNING", "web-bbbb2222", "POST /v1/requests -> 503"),
+        _log_line(3, "ERROR", "-", "Radarr is down"),
+        _log_line(4, "DEBUG", "web-aaaa1111", "detail"),
+    ])
+    get = lambda query: [l["message"] for l in client.get(f"/v1/debug/logs?{query}", headers=AUTH).json()["lines"]]  # noqa: E731
+    assert get("level=WARNING") == ["POST /v1/requests -> 503", "Radarr is down"]
+    assert get("level=warn") == ["POST /v1/requests -> 503", "Radarr is down"]
+    assert get("rid=web-aaaa1111") == ["GET /v1/status -> 200", "detail"]
+    assert get("q=radarr") == ["Radarr is down"]
+    r = client.get("/v1/debug/logs?level=loud", headers=AUTH)
+    assert r.status_code == 422 and r.json()["error"]["kind"] == "request"
+
+
+def test_debug_logs_redacts_registered_secrets(client, tmp_path):
+    from app.logs import register_secret
+    register_secret("supersecret-abcdef123")
+    _write_log(tmp_path, "gateway.log", [_log_line(1, text="key supersecret-abcdef123 and token " + TOKEN)])
+    body = client.get("/v1/debug/logs", headers=AUTH).text
+    assert "supersecret-abcdef123" not in body and TOKEN not in body and "***" in body
+
+
+def test_debug_logs_keeps_traceback_with_its_line(client, tmp_path):
+    import logging
+
+    from app.logs import setup_logging
+    setup_logging(tmp_path, "INFO")
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        logging.getLogger("gateway").exception("it broke")
+    logging.getLogger("gateway").info("after")
+    for h in logging.getLogger().handlers:
+        h.flush()
+    lines = client.get("/v1/debug/logs?lines=2", headers=AUTH).json()["lines"]
+    assert [l["level"] for l in lines] == ["ERROR", "INFO"]
+    assert lines[0]["message"].startswith("it broke\nTraceback") and "ValueError: boom" in lines[0]["message"]
+    assert lines[0]["where"].startswith("gateway.test_debug_logs_keeps_traceback_with_its_line:")
+    assert lines[1]["message"] == "after"
+
+
+def test_debug_logs_without_a_log_file(client, tmp_path):
+    from app.logs import log_dir
+    for f in log_dir(tmp_path).glob("*.log*"):
+        f.unlink()
+    body = client.get("/v1/debug/logs", headers=AUTH).json()
+    assert body["lines"] == [] and body["truncated"] is False
+
+
+def test_debug_logs_reads_only_the_tail_of_a_big_file(client, tmp_path, monkeypatch):
+    from app import logs
+    _write_log(tmp_path, "gateway.log", [_log_line(i % 3000) for i in range(30000)])
+    reads = []
+    real_open = logs.Path.open
+
+    def counting_open(self, *a, **kw):
+        f = real_open(self, *a, **kw)
+        real_read = f.read
+        f.read = lambda n=-1: reads.append(n) or real_read(n)   # noqa: E731
+        return f
+    monkeypatch.setattr(logs.Path, "open", counting_open)
+    body = client.get("/v1/debug/logs?lines=5", headers=AUTH).json()
+    assert len(body["lines"]) == 5 and body["truncated"]
+    assert all(n > 0 for n in reads) and sum(reads) <= 65536   # one chunk from the end, never the whole file
+
+
 def test_boot_checks_data_dir_and_leaves_owned_folders_alone(tmp_path, monkeypatch):
     import os
 

@@ -166,6 +166,12 @@ const ENDPOINTS = [
   { group: "Debug", method: "POST", path: "/v1/debug/bundle", safe: true, binary: "gateway-debug.zip",
     desc: "Same zip with a frontend's own log added under <name>/ (the web app uses this).",
     body: { name: "console", log: "hello from the API console", info: {} } },
+  { group: "Debug", method: "GET", path: "/v1/debug/logs", safe: true,
+    desc: "The last lines of gateway.log (and the previous day's file if needed), parsed and redacted: what Settings → Logs shows. level=WARNING keeps warnings and errors.",
+    p: [{ name: "lines", in: "query", value: "100" },
+        { name: "level", in: "query", value: "", options: ["", "WARNING", "ERROR"] },
+        { name: "q", in: "query", value: "" },
+        { name: "rid", in: "query", value: "" }] },
 ];
 
 // ---------------------------------------------------------------- settings

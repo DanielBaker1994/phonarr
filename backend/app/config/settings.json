@@ -1,7 +1,9 @@
 {
   "logging": {
     "level": "INFO",
-    "format": "%(asctime)s %(levelname)s [%(request_id)s] %(name)s.%(funcName)s:%(lineno)d: %(message)s",
+    "format": "%(asctime)s.%(msecs)03dZ %(levelname)s [%(request_id)s] %(name)s.%(funcName)s:%(lineno)d: %(message)s",
+    "timestamp_format": "%Y-%m-%dT%H:%M:%S",
+    "roll_utc": true,
     "main_file": "gateway.log",
     "date_format": "%Y%m%d",
     "retention_days": 14,
@@ -21,7 +23,28 @@
       "/v1/activity",
       "/v1/health"
     ],
-    "slow_request_ms": 5000
+    "slow_request_ms": 5000,
+    "view": {
+      "default_lines": 1000,
+      "max_lines": 5000,
+      "previous_files": 1,
+      "chunk_bytes": 65536,
+      "max_scan_bytes": 16777216,
+      "source": "gateway",
+      "level_aliases": {
+        "WARN": "WARNING",
+        "WARNINGS": "WARNING",
+        "ERRORS": "ERROR",
+        "FATAL": "CRITICAL"
+      },
+      "legacy_formats": [
+        {
+          "format": "%(asctime)s,%(msecs)03d %(levelname)s [%(request_id)s] %(name)s.%(funcName)s:%(lineno)d: %(message)s",
+          "timestamp_format": "%Y-%m-%d %H:%M:%S",
+          "utc": false
+        }
+      ]
+    }
   },
   "storage": {
     "data_dir": "data",

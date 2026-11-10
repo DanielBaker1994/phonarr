@@ -29,7 +29,8 @@ from pydantic import BaseModel, Field
 
 from .arr import TIMINGS, ArrError
 from .config import ConfigError, cfg, check_paths, data_dir as config_data_dir, data_file, msg, output_dir as config_output_dir
-from .logs import REQUEST_ID, get_logger, log_dir, redact, register_secret, setup_logging
+from .logs import (REQUEST_ID, get_logger, level_number, local_timezone, log_dir, read_log_tail, redact,
+                   register_secret, setup_logging, utc_iso)
 from .db import Database
 from .discovery import SORTS
 from .sources import TitleList
@@ -372,6 +373,18 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
     async def debug_bundle_with_client(body: ClientReport):
         """Same zip, with the caller's log added (the web frontend can't build zips itself)."""
         return zip_response(build_bundle(body))
+
+    @app.get("/v1/debug/logs", dependencies=[Depends(auth)])
+    async def debug_logs(lines: int = Query(cfg("logging.view.default_lines"), ge=1, le=cfg("logging.view.max_lines")),
+                         level: str | None = None, q: str | None = None, rid: str | None = None):
+        """The last lines of gateway.log (and the previous day's file if needed), parsed and redacted, for
+        Settings → Logs. level=WARNING keeps warnings and errors; q is a substring; rid one request id."""
+        if level and level_number(level) is None:
+            raise GatewayError(422, "request", msg("errors.bad_log_level"))
+        entries, truncated = await asyncio.to_thread(read_log_tail, log_dir(output_dir), lines, level or None,
+                                                     q or None, rid or None)
+        return {"lines": entries, "truncated": truncated,
+                "gateway": {"version": APP_VERSION, "timezone": local_timezone(), "now": utc_iso()}}
 
     @app.get("/v1/options", dependencies=[Depends(auth)])
     async def options():

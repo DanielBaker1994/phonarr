@@ -144,6 +144,7 @@ The API console (`/console/`) has a runnable example of each.
 | GET | `/v1/activity` | Items in flight, failed and recently added |
 | GET / POST | `/v1/compat`, `/v1/compat/check` | API compatibility report and "Test API" (docs/DEPLOYMENT.md §5.4) |
 | GET / POST | `/v1/debug/bundle` | Redacted gateway logs and state as a zip; POST adds the calling frontend's own log |
+| GET | `/v1/debug/logs?lines=&level=&q=&rid=` | The last gateway log lines (current and previous day), parsed and redacted, for Settings → Logs |
 
 ## Polling
 

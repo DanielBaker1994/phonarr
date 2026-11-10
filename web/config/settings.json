@@ -11,5 +11,9 @@
     "log_body_chars": 300,
     "timeout_ms": 20000,
     "long_timeout_ms": 120000
+  },
+  "logs": {
+    "lines": 1000,
+    "clock_warn_seconds": 120
   }
 }

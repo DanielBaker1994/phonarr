@@ -457,6 +457,33 @@ details.feature[open] summary { margin-bottom: 6px; }
 /* System status → Recent problems */
 .log-lines { margin: 0; max-height: 240px; overflow: auto; font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; color: var(--muted); }
 
+/* Settings → Logs: small monospace lines that wrap on a phone; newest at the bottom of its own scroll box */
+.logs-meta { margin: 4px 16px 10px; display: flex; flex-direction: column; gap: 2px; }
+.logs-controls { display: flex; flex-direction: column; gap: 8px; margin: 0 16px 8px; }
+.logs-chips { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.logs-chips .chips { gap: 6px; }
+.logs-chips .chip { padding: 5px 10px; font-size: 13px; }
+.logs-controls .searchbar.logs-search { margin: 0; height: 36px; }
+.logs-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nav-actions .icon-btn:disabled { opacity: 0.35; }
+.logview {
+  margin: 0 16px 8px; padding: 6px 10px; height: calc(100vh - 330px - var(--tabbar-h) - var(--safe-b)); min-height: 260px;
+  height: calc(100dvh - 330px - var(--tabbar-h) - var(--safe-b)); overflow: auto; border-radius: var(--radius);
+  background: var(--surface); font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overscroll-behavior: contain;
+}
+.logline { padding: 3px 0; border-bottom: 0.5px solid var(--border); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.logline:last-child { border-bottom: 0; }
+.logline > span, .logline > button { margin-right: 6px; }
+.ll-time, .ll-where { color: var(--muted); }
+.ll-src { padding: 0 4px; border-radius: 4px; font-size: 10px; font-weight: 600; background: var(--surface-2); }
+.ll-src.web { background: var(--accent-soft); }
+.ll-level { font-weight: 600; }
+.lvl-warning .ll-level { color: var(--warn); }
+.lvl-error .ll-level, .lvl-critical .ll-level { color: var(--bad); }
+.lvl-error, .lvl-critical { background: var(--bad-soft); }
+.ll-rid { font: inherit; color: var(--info); text-decoration: underline; padding: 0; }
+.ll-msg { color: var(--text); }
+
 /* People who ask the system for less motion get no slides or lifts; spinners and progress keep moving. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

@@ -10,6 +10,8 @@ const P = {
   retry: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
   download: "M12 4v11M7 10.5l5 5 5-5M5 20h14",
+  copy: "M9 9h11v11H9zM5 15H4V4h11v1",
+  logs: "M4 5h16M4 10h16M4 15h10M4 20h7",
   upload: "M12 20V9M7 13.5l5-5 5 5M5 4h14",
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5V12l3 2",
   pause: "M9 6v12M15 6v12",

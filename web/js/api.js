@@ -168,6 +168,15 @@ export const api = {
   compatReports: () => api.json("/v1/compat"),
   runCompatCheck: () => api.json("/v1/compat/check", { method: "POST", long: true }),
 
+  /** The gateway's last log lines, parsed (Settings → Logs), with the HTTP Date header and when the call
+   *  went out and came back, so the screen can work out the clock difference. */
+  async debugLogs({ lines, level, rid } = {}) {
+    const sentAt = Date.now();
+    const res = await api.raw("/v1/debug/logs", { query: { lines, level, rid } });
+    const receivedAt = Date.now();
+    return { ...(await res.json()), dateHeader: res.headers.get("Date"), sentAt, receivedAt };
+  },
+
   /** Gateway debug zip with this browser's log and device info added (POST /v1/debug/bundle). */
   async debugBundle(log, info) {
     const res = await api.raw("/v1/debug/bundle", { method: "POST", body: { name: "web", log, info }, long: true });

@@ -31,7 +31,10 @@
     "unhandled_rejection": "Unhandled promise rejection: {error} {stack}",
     "render_failed": "Screen crashed while rendering: {error} {stack}",
     "storage_failed": "Can't save the log in browser storage ({error}); logging to the console only",
-    "cache_failed": "Can't save {key} in browser storage: {error}"
+    "cache_failed": "Can't save {key} in browser storage: {error}",
+    "logs_loaded": "Logs screen: {gateway} gateway + {device} device lines, clock difference {skew}s",
+    "logs_failed": "Logs screen: couldn't load the gateway log: {error}",
+    "logs_clock": "Device clock is {skew}s off the gateway's (device {device_tz}, gateway {gateway_tz})"
   },
   "errors": {
     "not_signed_in": "Sign in with the gateway access token.",
@@ -48,5 +51,39 @@
   },
   "app": {
     "name": "Phonarr"
+  },
+  "logs": {
+    "title": "Logs",
+    "settings_row": "Logs",
+    "source_both": "Both",
+    "source_gateway": "Gateway",
+    "source_device": "This device",
+    "source_label": "Source",
+    "level_label": "Level",
+    "level_all": "Everything",
+    "level_warn": "Warnings and errors",
+    "search": "Search the log",
+    "refresh": "Refresh",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copy_failed": "Couldn't copy. Use Download instead.",
+    "download": "Download",
+    "gateway_label": "Gateway",
+    "device_label": "This device",
+    "clock": "clock",
+    "clock_ahead": "{seconds} s ahead",
+    "clock_behind": "{seconds} s behind",
+    "clock_same": "in step",
+    "clock_unknown": "unknown",
+    "clock_warn": "This device's clock is {seconds} s off the gateway's, so the two sides won't line up. Set the date and time to automatic.",
+    "rid_filter": "Request {rid}",
+    "empty": "No lines match.",
+    "count": "{shown} of {total} lines",
+    "truncated": "older gateway lines are in the debug report",
+    "gateway_failed": "Couldn't load the gateway log: {error}",
+    "note": "Times are UTC on both sides. Tap a request id to see that call in both logs. API keys and the access token are removed.",
+    "file_name": "Phonarr-logs-{stamp}.txt",
+    "tag_gateway": "GW",
+    "tag_web": "WEB"
   }
 }

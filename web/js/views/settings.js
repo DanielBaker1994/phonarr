@@ -5,6 +5,7 @@ import { html, useEffect, useState } from "../../vendor/preact-htm.js";
 import { Icon } from "../icons.js";
 import { api } from "../api.js";
 import { log, registerSecret } from "../log.js";
+import { text } from "../config.js";
 import { SEASON_MODES, seasonLabel, capitalize } from "../models.js";
 import * as S from "../store.js";
 import { state } from "../store.js";
@@ -236,6 +237,7 @@ function DebugSection() {
     setBusy(false);
   };
   return html`<${Group} header="Troubleshooting" footer="One zip with this browser's log and the gateway's logs and status. API keys and the access token are removed.">
+    <${Row} href="#/settings/logs" label=${html`<span class="inline"><span class="accent"><${Icon} name="logs" size=${18} /></span> ${text("logs.settings_row")}</span>`} />
     <button class="frow accent" disabled=${busy} onClick=${build}>
       <span class="row-label"><${Icon} name="bug" size=${18} /> Download debug report</span><span class="row-value">${busy && html`<${Spinner} small />`}</span></button>
     ${error && html`<div class="group-pad"><${Notice} tone="bad">${error}<//></div>`}

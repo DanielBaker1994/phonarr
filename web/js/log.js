@@ -120,7 +120,30 @@ export const log = {
   text: () => days().filter((d) => d !== today).map(read).join("") + buffer,
   /** This session's last warnings and errors, newest last. */
   recentProblems: () => [...recent],
+  /** The last `n` lines of this browser's log, parsed like the gateway's (Settings → Logs), oldest first. */
+  entries: (n) => parseLogText(log.text()).slice(-n),
 };
+
+// "2026-11-10T08:00:00.123Z WARN store.add: message [req web-1a2b3c4d] …"; anything else continues the line above.
+const LINE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) ([A-Z]+) (\S+?): ([\s\S]*)$/;
+const RID = /\[req ([A-Za-z0-9_-]+)\]/;
+const LEVELS = { WARN: "WARNING" };   // the gateway's name, so one level filter works on both
+
+/** Log text -> [{ts, level, rid, source, where, message}], the shape GET /v1/debug/logs returns. */
+export function parseLogText(raw, source = "web") {
+  const out = [];
+  for (const line of String(raw).split("\n")) {
+    const m = line.match(LINE);
+    if (m) {
+      out.push({ ts: m[1], level: LEVELS[m[2]] || m[2], rid: m[4].match(RID)?.[1] || "-", source, where: m[3], message: redact(m[4]) });
+    } else if (line && out.length) {
+      out[out.length - 1].message += `\n${redact(line)}`;
+    } else if (line) {
+      out.push({ ts: null, level: "", rid: "-", source, where: "", message: redact(line) });
+    }
+  }
+  return out;
+}
 
 /** Uncaught exceptions and rejected promises go into the log (and so into the debug report),
  *  not only the browser console. Called once from main.js. */

@@ -20,6 +20,7 @@ Every row applies to **both frontends** (the web app and the iPhone app) unless 
 | `Views/FilterViews.swift` | `views/filters.js` |
 | `Views/SimilarViews.swift` | `views/similar.js` |
 | `Views/ActivityView.swift` | `views/activity.js` |
+| `Views/CalendarView.swift`, `Core/CalendarModels.swift` | `views/calendar.js`, `calendar.js` |
 | `Views/SettingsViews.swift` | `views/settings.js` |
 | `Views/CompatView.swift` | `views/compat.js` |
 | `Views/SystemStatusView.swift` | `views/status.js` |
@@ -138,6 +139,31 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | A2 | Failed row | Message + Retry right in the row | `ActivityRow` | ✅ 📱 check Retry doesn't also open details |
 | A3 | Empty | "No activity" | `ActivityView` | ✅ |
 | A4 | Arr down | Banner, statuses marked "(last known)" | `ServiceBanner`, `StatusLine` | ✅ |
+| A5 | Switching Downloads / Calendar | Segmented switch at the top of Activity; the last choice is remembered per device. Polling for downloads carries on while either is shown | `ActivityView` (Picker `.segmented`), `views/activity.js` | ✅ 📱 |
+
+### 8a. Calendar (Activity → Calendar)
+
+Upcoming and recent releases from Radarr and Sonarr as an agenda: one section per local day, newest at the bottom. Only titles already in Radarr/Sonarr appear (that is what their calendars hold). `GET /v1/calendar` with the device's timezone; never polled. Requirements: docs/KNOWN_BUGS_PRD.md KB-12..16, KB-30..36.
+
+| ID | Situation | Expected | Code | |
+|---|---|---|---|---|
+| CAL1 | Open the Calendar | Opens scrolled to Today with no visible jump (the list is placed before it is drawn). Past days above, future below. Day headers stick under the navigation bar: "Today" (accent), "Tomorrow", "Yesterday", then weekday and date | `CalendarView`, `views/calendar.js` | ✅ web, 📱 iPhone |
+| CAL2 | Loading (first time) | A placeholder (skeleton rows on the web, a spinner on iPhone), never an error while waiting | `Skeleton` / `ProgressView` | ✅ |
+| CAL3 | A film | One row per release kind in range: "In cinemas", "Digital release", "Physical release", on that calendar day in every timezone | `entryLine` / `CalendarDates.line` | ✅ |
+| CAL4 | An episode | "S02E05 · Episode title · 21:00", in the device's timezone. Several episodes of one show on one day: one row "S02E01–E08 · 8 episodes". Specials start with "Special". Premieres and finales get a small tag | same | ✅ |
+| CAL5 | Unmonitored title or episode | Faded, listed after monitored ones that day (series monitoring counts) | `.unmonitored` / `.opacity` | ✅ |
+| CAL6 | Status | "Downloaded" when that release has its file; otherwise a chip for Queued / Downloading n% / Importing / Failed / In library from the live status, so a request or download shows straight away | `Entry`, `CalendarRow` | ✅ |
+| CAL7 | Tap a row | Opens the normal details screen (no popup); Back returns to the same place in the list | `openTitle`, `NavigationLink(value:)` | ✅ |
+| CAL8 | Filters | Films / TV / All, Hide specials, Monitored only. Remembered per device (localStorage / @AppStorage). Web: chips above the list; iPhone: filter menu in the toolbar | `views/calendar.js`, `CalendarView.filterMenu` | ✅ |
+| CAL9 | Today button | Scrolls back to Today | toolbar | ✅ |
+| CAL10 | Show earlier / Show later | Adds 14 days before or after; the list stays where it was | `loadMore` | ✅ |
+| CAL11 | Refresh | Web: refresh button (the web app has no pull to refresh). iPhone: pull to refresh | | ✅ |
+| CAL12 | Left open past midnight, or reopened another day | Today moves to the new day and the calendar reloads (timer at the next local midnight, and a check on becoming visible / scene active) | `dayWatcher`, `.task(id: today)` | ✅ web, 📱 iPhone |
+| CAL13 | Empty | "Nothing in the calendar" (or "Nothing matches these filters"); Today still has a "Nothing today" row | | ✅ |
+| CAL14 | One server down | The other's entries show, with a notice naming the one that failed ("Sonarr: Could not connect…"). Never a full-screen error when there is something to show | `services` in the response | ✅ |
+| CAL15 | Neither server connected | "Connect Radarr or Sonarr in Settings…" with a button to Settings (web) | | ✅ |
+| CAL16 | Offline (gateway unreachable) | First load: "Couldn't load the calendar" + the reason + Try again. Already loaded: the list stays with "Can't reach the gateway. Showing the calendar from earlier." | `failed` / `fail` | ✅ |
+| CAL17 | Browser sent a timezone the gateway doesn't know | Times in UTC, with a notice saying so | `tz_fallback` | ✅ |
 
 ## 9. Settings
 

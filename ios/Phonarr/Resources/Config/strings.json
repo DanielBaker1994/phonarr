@@ -29,7 +29,10 @@
     "crash_report": "Crash report from an earlier run saved to {file}: {summary}",
     "diagnostic_report": "Diagnostic report from an earlier run saved to {file}",
     "uncaught_exception": "Uncaught exception {name}: {reason}",
-    "log_rolled": "Log passed {bytes} bytes today; earlier lines are in {file}"
+    "log_rolled": "Log passed {bytes} bytes today; earlier lines are in {file}",
+    "logs_loaded": "Logs screen: {gateway} gateway + {device} device lines, clock difference {skew}s",
+    "logs_failed": "Logs screen: couldn't load the gateway log: {error}",
+    "logs_clock": "Device clock is {skew}s off the gateway's (device {device_tz}, gateway {gateway_tz})"
   },
   "errors": {
     "no_response": "No HTTP response",
@@ -41,5 +44,37 @@
     "tls": "The secure connection to the gateway failed. Use http:// for a Tailscale 100.x address, or check the certificate if you serve it over HTTPS.",
     "ats": "iOS blocked a plain HTTP connection. The app allows HTTP by default; check Info.plist NSAppTransportSecurity.",
     "decoding": "The gateway answered in a format this app doesn't understand. The app and gateway are probably different versions: update both. Settings → Troubleshooting → Share debug report has the details."
+  },
+  "logs": {
+    "title": "Logs",
+    "settings_row": "Logs",
+    "source_label": "Source",
+    "source_both": "Both",
+    "source_gateway": "Gateway",
+    "source_device": "This device",
+    "level_label": "Level",
+    "level_all": "Everything",
+    "level_warn": "Warnings and errors",
+    "search": "Search the log",
+    "refresh": "Refresh",
+    "copy": "Copy",
+    "copied": "Copied",
+    "share": "Share",
+    "gateway_label": "Gateway",
+    "device_label": "This device",
+    "clock": "Clock difference",
+    "clock_ahead": "{seconds} s ahead",
+    "clock_behind": "{seconds} s behind",
+    "clock_same": "in step",
+    "clock_unknown": "unknown",
+    "clock_warn": "This iPhone's clock is {seconds} s off the gateway's, so the two sides won't line up. Settings → General → Date & Time → Set Automatically.",
+    "rid_filter": "Only request {rid}",
+    "empty": "No lines match.",
+    "count": "{shown} of {total} lines",
+    "truncated": "Older gateway lines are in the debug report.",
+    "gateway_failed": "Couldn't load the gateway log: {error}",
+    "note": "Times are UTC on both sides. Tap a request id to see that call in both logs. API keys and the access token are removed.",
+    "tag_gateway": "GW",
+    "tag_ios": "IOS"
   }
 }

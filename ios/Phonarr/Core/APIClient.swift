@@ -172,6 +172,20 @@ final class APIClient: @unchecked Sendable {
         try await send(makeRequest("v1/debug/bundle")).0
     }
 
+    /// The gateway's last log lines, parsed and redacted (Settings → Logs), with the HTTP Date header and the
+    /// send/receive times so the screen can show how far this phone's clock is from the gateway's.
+    func debugLogs(lines: Int, level: String?, rid: String?) async throws -> DebugLogsFetch {
+        var q: [URLQueryItem] = [.init(name: "lines", value: String(lines))]
+        if let level, !level.isEmpty { q.append(.init(name: "level", value: level)) }
+        if let rid, !rid.isEmpty { q.append(.init(name: "rid", value: rid)) }
+        let sentAt = Date()
+        let (data, http) = try await send(makeRequest("v1/debug/logs", query: q))
+        let receivedAt = Date()
+        let body: DebugLogsResponse = try decode(data)
+        return DebugLogsFetch(response: body, dateHeader: http.value(forHTTPHeaderField: "Date"),
+                              sentAt: sentAt, receivedAt: receivedAt)
+    }
+
     /// Last stored API compatibility reports.
     func compatReports() async throws -> CompatReports { try await get("v1/compat") }
 

@@ -400,6 +400,9 @@ struct DebugSection: View {
 
     var body: some View {
         Section {
+            NavigationLink { LogsView() } label: {
+                Label(AppConfig.text("logs.settings_row"), systemImage: "doc.text.magnifyingglass")
+            }
             Button {
                 Task {
                     building = true

@@ -400,7 +400,11 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
                        year_max: int | None = None, runtime: str | None = None, rating_min: float | None = None,
                        language: str | None = None, studio: str | None = None, collection: str | None = None,
                        certification: str | None = None, status: str | None = None, source: str | None = None,
-                       sort: str | None = None, include_tracked: bool = False):
+                       sort: str | None = None, include_tracked: bool = False, exclude_genres: str | None = None,
+                       neighbours: bool = False, neighbours_off: str | None = None, english_only: bool = False,
+                       decades: str | None = None, runtime_min: int | None = None, runtime_max: int | None = None,
+                       page: int | None = Query(None, ge=1),
+                       page_size: int | None = Query(None, ge=1, le=cfg("discovery.page_size_max"))):
         check_type(type)
         if sort and sort not in SORTS:
             raise GatewayError(422, "request", msg("errors.bad_sort", sorts=", ".join(SORTS)))
@@ -408,8 +412,10 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         filters = {"q": q, "genres": genres or genre, "decade": decade, "year_min": year_min, "year_max": year_max,
                    "runtime": runtime, "rating_min": rating_min, "language": language, "studio": studio,
                    "collection": collection, "certification": certification, "status": status,
-                   "source": source}
-        return await gateway.discover(type, filters, include_tracked, sort)
+                   "source": source, "exclude_genres": exclude_genres, "neighbours": neighbours,
+                   "neighbours_off": neighbours_off, "english_only": english_only, "decades": decades,
+                   "runtime_min": runtime_min, "runtime_max": runtime_max}
+        return await gateway.discover(type, filters, include_tracked, sort, page, page_size)
 
     @app.get("/v1/titles/{media_type}/{external_id}/similar", dependencies=[Depends(auth)])
     async def similar(media_type: str, external_id: int, mix: bool = True, limit: int = Query(20, ge=1, le=60),

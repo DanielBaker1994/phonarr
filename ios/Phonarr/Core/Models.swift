@@ -86,7 +86,11 @@ struct MediaCard: Codable, Identifiable, Hashable {
     var originalTitle: String? = nil
     var decade: Int? = nil
     var runtime: Int? = nil
+    /// The trusted rating (IMDb and TMDB by votes, worked out by the gateway); sorting and the rating filter use it.
     var rating: Double? = nil
+    /// Each source's own score: imdb, tmdb, rottenTomatoes, metacritic, trakt (films) or tvdb (TV).
+    var ratings: [String: Double]? = nil
+    var votes: [String: Int]? = nil
     var popularity: Double? = nil
     var language: String? = nil
     var studio: String? = nil
@@ -164,6 +168,14 @@ struct Facets: Codable, Hashable {
     var sources: [FacetValue]? = nil
     var statuses: [FacetValue]? = nil
     var rated: Int? = nil
+    var genreNeighbours: [String: [GenreNeighbour]]? = nil
+    var years: YearSpan? = nil
+    var nonEnglish: Int? = nil
+}
+
+struct YearSpan: Codable, Hashable {
+    let min: Int
+    let max: Int
 }
 
 struct SimilarResponse: Codable {

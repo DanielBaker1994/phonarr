@@ -4,6 +4,7 @@ import { html, useEffect, useRef, useState } from "../../vendor/preact-htm.js";
 import { Icon } from "../icons.js";
 import { STATE_ICON, stateLabel, isActive, planSummary, SERVICE_FOR, capitalize, cardKey } from "../models.js";
 import * as S from "../store.js";
+import { ratingStrip } from "../filters.js";
 import { state } from "../store.js";
 import { back, go, openTitle } from "../router.js";
 
@@ -154,9 +155,12 @@ export function PosterCell({ card, size, caption, selection, onSelect }) {
 const width = (size) => (size ? `width:${size}px` : "");
 
 function CellText({ card, caption }) {
+  const strip = ratingStrip(card);
   return html`<div class="cell-text">
     <div class="cell-title">${card.title || "Untitled"}</div>
-    ${card.year && html`<div class="cell-sub">${card.year}</div>`}
+    <div class="cell-sub">${card.year || ""}${card.rating != null && html`<span class="cell-rating">★ ${card.rating.toFixed(1)}</span>`}</div>
+    ${strip.length > 0 && html`<div class="rating-strip" aria-label="Ratings">${strip.map(([label, value]) =>
+      html`<span><b>${value}</b> ${label}</span>`)}</div>`}
     ${caption && html`<div class="cell-sub">${caption}</div>`}
   </div>`;
 }

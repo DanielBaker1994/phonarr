@@ -519,6 +519,37 @@ def test_filters_and_sorting(rich):
     assert d("sort=bogus").status_code == 422
 
 
+def test_new_filters_english_decades_runtime_range_neighbours(rich):
+    d = lambda qs: rich.get("/v1/discover?type=movie&" + qs, headers=AUTH)  # noqa: E731
+    assert set(ids(d("english_only=true"))) == {10331, 1010, 1011, 1012, 1013, 961}   # 961 has no language: kept
+    assert set(ids(d("decades=1920,1960"))) == {653, 961, 10331, 1010, 1012}
+    assert set(ids(d("runtime_min=75&runtime_max=95"))) == {1010, 1013, 961, 653}
+    assert set(ids(d("exclude_genres=Horror"))) == {1011, 961}
+    assert ids(d("genres=Crime")) == [1011]
+    assert set(ids(d("genres=Crime&neighbours=true"))) == {1011, 10331}                # Thriller is Crime's neighbour
+    assert ids(d("genres=Crime&neighbours=true&neighbours_off=Thriller")) == [1011]
+    assert ids(d("genres=Crime&neighbours=true&exclude_genres=Horror")) == [1011]    # an excluded genre always wins
+
+
+def test_discover_sorts_by_trusted_rating_and_pages_without_cap(rich):
+    d = lambda qs: rich.get("/v1/discover?type=movie&" + qs, headers=AUTH).json()  # noqa: E731
+    order = [i["id"] for i in d("")["items"]]
+    assert set(order[:2]) == {10331, 653} and order[-1] == 961       # highest rated first by default, unrated last
+    assert "page" not in d("") and d("")["matched"] == 7
+    pages = [[i["id"] for i in d(f"page_size=3&page={n}")["items"]] for n in (1, 2, 3)]
+    assert [len(p) for p in pages] == [3, 3, 1] and sum(pages, []) == order
+    assert d("page_size=3&page=3")["matched"] == 7 and d("page_size=3&page=3")["page"] == 3
+    card = next(i for i in d("")["items"] if i["id"] == 10331)
+    assert card["rating"] == 7.6 and card["ratings"] == {"imdb": 7.8, "tmdb": 7.5}
+    assert card["votes"] == {"imdb": 140000, "tmdb": 2000}
+    f = d("")["facets"]
+    assert f["genre_neighbours"]["Crime"] == [{"value": "Thriller", "overlap": 0.5}]
+    assert f["years"] == {"min": 1922, "max": 1968} and f["non_english"] == 1
+    tv = {i["id"]: i for i in rich.get("/v1/discover?type=series", headers=AUTH).json()["items"]}
+    assert tv[70002]["rating"] == 7.0 and tv[70002]["ratings"] == {"tvdb": 7.2}       # 50 votes vs 20 prior votes
+    assert rich.get("/v1/discover?type=movie&page_size=0", headers=AUTH).status_code == 422
+
+
 def test_facets_describe_unfiltered_set(rich):
     r = rich.get("/v1/discover?type=movie&genres=Crime", headers=AUTH).json()
     assert r["total"] == 7 and len(r["items"]) == 1
@@ -555,7 +586,8 @@ def test_more_like_this_respects_pool_and_tracking(rich, fake):
 
 def test_detail_exposes_rich_metadata(rich):
     d = rich.get("/v1/titles/movie/10331", headers=AUTH).json()
-    assert d["ratings"] == {"imdb": 7.8, "tmdb": 7.5} and d["rating"] == 7.5
+    # rating is the trusted rating: IMDb and TMDB by votes, pulled towards 6.5 by 25k prior votes
+    assert d["ratings"] == {"imdb": 7.8, "tmdb": 7.5} and d["rating"] == 7.6
     assert d["language"] == "English" and d["studio"] == "Image Ten" and "zombie" in d["keywords"]
     assert d["decade"] == 1960
 

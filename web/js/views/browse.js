@@ -1,7 +1,8 @@
 // Discover, Movies and TV Shows (mirrors ios/Phonarr/Views/BrowseViews.swift).
-import { html, useEffect, useState } from "../../vendor/preact-htm.js";
+import { html, useEffect, useRef, useState } from "../../vendor/preact-htm.js";
+import { cfg } from "../config.js";
 import { Icon } from "../icons.js";
-import { activeCount, applyFilters, buildShelves } from "../filters.js";
+import { activeCount, applyFilters, buildShelves, viaNeighbour } from "../filters.js";
 import { cardKey, noun, tabTitle, planSummary, isActive } from "../models.js";
 import * as S from "../store.js";
 import { state } from "../store.js";
@@ -61,9 +62,21 @@ function Grid({ type }) {
   const filters = state.filters[type];
   const setFilters = (f) => { state.filters[type] = f; S.emit(); };
   const all = state.catalog[type];
-  const shown = applyFilters(all, filters, query);
+  const neighbourMap = state.facets[type]?.genre_neighbours || null;
+  const shown = applyFilters(all, filters, query, neighbourMap);
+  // No cap: every match is reachable. Render a page at a time and add the next as the end scrolls into view.
+  const pageSize = cfg("filters.page_size", 60);
+  const [limit, setLimit] = useState(pageSize);
+  const sentinel = useRef(null);
+  useEffect(() => setLimit(pageSize), [type, query, JSON.stringify(filters)]);
+  useEffect(() => {
+    if (!sentinel.current || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) setLimit((n) => n + pageSize); }, { rootMargin: "600px" });
+    io.observe(sentinel.current);
+    return () => io.disconnect();
+  }, [sentinel.current, limit, shown.length > limit]);
   const shownKeys = new Set(shown.map(cardKey));
-  const remoteShown = applyFilters(remote.items, filters, "").filter((c) => !shownKeys.has(cardKey(c)));
+  const remoteShown = applyFilters(remote.items, filters, "", neighbourMap).filter((c) => !shownKeys.has(cardKey(c)));
   const visible = [...shown, ...remoteShown];
   const loading = state.loading.has(type);
 
@@ -95,7 +108,7 @@ function Grid({ type }) {
   const startSelect = (card) => () => { setSelecting(true); setSelected(new Set([cardKey(card)])); };
   const finish = (failed) => { setSelected(new Set(failed)); if (!failed.size) setSelecting(false); };
 
-  const cell = (c) => html`<${PosterCell} key=${cardKey(c)} card=${c} caption=${caption(c, filters.sort)}
+  const cell = (c) => html`<${PosterCell} key=${cardKey(c)} card=${c} caption=${caption(c, filters, neighbourMap)}
     selection=${selection} onSelect=${startSelect(c)} />`;
 
   const selectable = visible.filter(S.isSelectable);
@@ -119,7 +132,9 @@ function Grid({ type }) {
     <${ServiceBanner} only=${type} />
     ${state.discoverError[type] && html`<${Notice}>${state.discoverError[type]}<//>`}
     <${ActiveFilterBar} filters=${filters} onChange=${setFilters} shown=${shown.length} total=${all.length} />
-    ${loading && !all.length ? html`<div class="center pad"><${Spinner} /></div>` : html`<div class="grid">${shown.map(cell)}</div>`}
+    ${loading && !all.length ? html`<div class="center pad"><${Spinner} /></div>` : html`<div class="grid">${shown.slice(0, limit).map(cell)}</div>
+      ${shown.length > limit && html`<div class="load-more" ref=${sentinel}>
+        <button class="btn" onClick=${() => setLimit(limit + pageSize)}>Show more (${shown.length - limit} left)</button></div>`}`}
     ${query.trim().length >= 2 && html`<section class="pad">
       <h3 class="section-title">From ${type === "movie" ? "Radarr" : "Sonarr"} search ${remote.busy && html`<${Spinner} small />`}</h3>
       ${remote.error && html`<${Notice}>${remote.error}<//>`}
@@ -133,7 +148,7 @@ function Grid({ type }) {
     ${selecting && html`<${SelectionBar} type=${type} chosen=${visible.filter((c) => selected.has(cardKey(c)))}
         sending=${sending} setSending=${setSending} finish=${finish} />`}
     ${showFilters && html`<${FilterSheet} type=${type} filters=${filters} onChange=${setFilters}
-        facets=${state.facets[type] || {}} count=${(f) => applyFilters(all, f, query).length} onClose=${() => setShowFilters(false)} />`}
+        facets=${state.facets[type] || {}} count=${(f) => applyFilters(all, f, query, neighbourMap).length} onClose=${() => setShowFilters(false)} />`}
   <//>`;
 }
 
@@ -166,10 +181,12 @@ function SelectionBar({ type, chosen, sending, setSending, finish }) {
   </div>`;
 }
 
-/** Show the value being sorted by under each poster, so the order makes sense. */
-function caption(card, sort) {
-  if (sort === "rating" && card.rating != null) return `★ ${card.rating.toFixed(1)}`;
-  if ((sort === "runtime_asc" || sort === "runtime_desc") && card.runtime) return `${card.runtime} min`;
+/** Under each poster: the genre a title matched through ("via Thriller"), or the length when sorting by it.
+ * The rating is always shown by the poster cell itself. */
+function caption(card, filters, neighbourMap) {
+  const via = viaNeighbour(card, filters, neighbourMap);
+  if (via) return `via ${via}`;
+  if ((filters.sort === "runtime_asc" || filters.sort === "runtime_desc") && card.runtime) return `${card.runtime} min`;
   return null;
 }
 

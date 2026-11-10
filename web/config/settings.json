@@ -21,5 +21,26 @@
   "logs": {
     "lines": 1000,
     "clock_warn_seconds": 120
+  },
+  "filters": {
+    "neighbour_min_overlap": 0.15,
+    "english_names": [
+      "English"
+    ],
+    "runtime_steps": [
+      0,
+      30,
+      45,
+      60,
+      80,
+      90,
+      100,
+      110,
+      120,
+      135,
+      150,
+      180
+    ],
+    "page_size": 60
   }
 }

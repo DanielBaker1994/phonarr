@@ -145,6 +145,17 @@ struct PosterCell: View {
         VStack(alignment: .leading, spacing: 2) {
             PosterCard(title: card.title, year: card.year, posterURL: card.posterURL, status: status, width: width,
                        mark: mark, quickAction: selection == nil ? quickAction(status) : nil)
+            if let rating = card.rating {
+                Text("★ \(String(format: "%.1f", rating))").font(.caption2.weight(.semibold)).monospacedDigit()
+                    .frame(width: width, alignment: .leading)
+            }
+            let strip = RatingStrip.items(card)
+            if !strip.isEmpty {
+                Text(strip.map { "\($0.value) \($0.label)" }.joined(separator: "  "))
+                    .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
+                    .frame(width: width, alignment: .leading)
+                    .accessibilityLabel("Ratings: " + strip.map { "\($0.label) \($0.value)" }.joined(separator: ", "))
+            }
             if let caption {
                 Text(caption).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     .frame(width: width, alignment: .leading)
@@ -201,6 +212,8 @@ struct MediaGridView: View {
     @State private var searchingRemote = false
     @State private var searchRun = 0   // the newest runSearch; older ones never touch the results or spinner
     @State private var sending = false
+    /// No cap: every match is reachable. A page is shown at a time and the next is added as the end comes into view.
+    @State private var limit = AppConfig.int("filters.page_size", default: 60)
 
     private let columns = [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: 14, alignment: .top)]
 
@@ -221,9 +234,11 @@ struct MediaGridView: View {
 
     private var grid: some View {
         let all = model.catalog[type] ?? []
-        let shown = filters.wrappedValue.apply(all, query: query)
+        let neighbourMap = model.facets[type]?.genreNeighbours
+        let shown = filters.wrappedValue.apply(all, query: query, neighbourMap: neighbourMap)
         let shownKeys = Set(shown.map(\.key))
-        let remote = filters.wrappedValue.apply(searchResults, query: "").filter { !shownKeys.contains($0.key) }
+        let remote = filters.wrappedValue.apply(searchResults, query: "", neighbourMap: neighbourMap)
+            .filter { !shownKeys.contains($0.key) }
         let visible = shown + remote
         return ScrollView {
             ServiceBanner(only: type)
@@ -233,10 +248,16 @@ struct MediaGridView: View {
             }
             ActiveFilterBar(filters: filters, shown: shown.count, total: all.count)
             LazyVGrid(columns: columns, spacing: 18) {
-                ForEach(shown, id: \.key) { card in cell(card) }
+                ForEach(shown.prefix(limit), id: \.key) { card in cell(card) }
             }
             .padding(.horizontal)
             .padding(.bottom)
+            if shown.count > limit {
+                Button("Show more (\(shown.count - limit) left)") { limit += pageSize }
+                    .buttonStyle(.bordered)
+                    .padding(.bottom)
+                    .onAppear { limit += pageSize }
+            }
             if query.count >= 2 {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -275,9 +296,11 @@ struct MediaGridView: View {
         }
         .sheet(isPresented: $showFilters) {
             FilterSheet(type: type, filters: filters, facets: model.facets[type] ?? Facets(),
-                        resultCount: { filters.wrappedValue.apply(all, query: query).count })
+                        resultCount: { filters.wrappedValue.apply(all, query: query, neighbourMap: neighbourMap).count })
                 .presentationDetents([.medium, .large])
         }
+        .onChange(of: filters.wrappedValue) { _, _ in limit = pageSize }
+        .onChange(of: query) { _, _ in limit = pageSize }
         .refreshable { await model.loadDiscover(type) }
         .task { if all.isEmpty { await model.loadDiscover(type) } }
         .onChange(of: model.statuses) { _, _ in
@@ -398,12 +421,15 @@ struct MediaGridView: View {
         searchError = r.error
     }
 
-    /// Show the value being sorted by under each poster, so the order makes sense.
+    private var pageSize: Int { AppConfig.int("filters.page_size", default: 60) }
+
+    /// Under each poster: the genre a title matched through ("via Thriller"), or the length when sorting by it.
+    /// The rating is always shown by the poster cell itself.
     private func caption(for card: MediaCard) -> String? {
+        if let via = filters.wrappedValue.viaNeighbour(card, model.facets[type]?.genreNeighbours ?? [:]) { return "via \(via)" }
         switch filters.wrappedValue.sort {
-        case .rating: card.rating.map { String(format: "★ %.1f", $0) }
-        case .runtimeAsc, .runtimeDesc: card.runtime.map { "\($0) min" }
-        default: nil
+        case .runtimeAsc, .runtimeDesc: return card.runtime.map { "\($0) min" }
+        default: return nil
         }
     }
 }

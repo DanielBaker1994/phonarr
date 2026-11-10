@@ -28,6 +28,11 @@ enum AppConfig {
     static func string(_ key: String, default fallback: String = "") -> String { dig(settings, key) as? String ?? fallback }
     static func int(_ key: String, default fallback: Int = 0) -> Int { (dig(settings, key) as? NSNumber)?.intValue ?? fallback }
     static func dict(_ key: String) -> [String: String] { dig(settings, key) as? [String: String] ?? [:] }
+    static func double(_ key: String, default fallback: Double = 0) -> Double { (dig(settings, key) as? NSNumber)?.doubleValue ?? fallback }
+    static func ints(_ key: String, default fallback: [Int] = []) -> [Int] {
+        (dig(settings, key) as? [NSNumber])?.map(\.intValue) ?? fallback
+    }
+    static func strings(_ key: String, default fallback: [String] = []) -> [String] { dig(settings, key) as? [String] ?? fallback }
 
     /// Text by dotted key from strings.json with `{name}` placeholders filled in.
     static func text(_ key: String, _ values: [String: Any] = [:]) -> String {

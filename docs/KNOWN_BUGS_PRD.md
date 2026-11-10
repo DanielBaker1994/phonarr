@@ -46,11 +46,11 @@ Ideas only: no code or assets were copied from any of them.
 |---|---|---|---|---|---|
 | KB-10 | General (VM resume, NTP corrections) | TTLs, the Retry cooldown and the poll interval use `time.time()`. If the clock moves back, caches look fresh for hours and Retry is refused. | `test_known_bugs.py::test_clock_going_backwards_does_not_freeze_retry_or_caches` | FAIL → fixed | `time.monotonic()` for every duration; `time.time()` only for timestamps people see |
 | KB-11 | Gotify/ntfy timestamp fixes; correlating logs | Gateway log lines use local time with no offset (`2026-11-10 08:00:00,123`); the web and iPhone logs use UTC (`…Z`). In a debug report the two sides look hours apart. | `test_gateway.py::test_log_lines_are_utc_iso` | FAIL → fixed | Gateway lines in UTC ISO 8601 with milliseconds and `Z`, like the frontends: `RedactingFormatter.converter = time.gmtime`, `logging.format` / `logging.timestamp_format` in settings.json; files roll at UTC midnight. The iPhone log (local time with an offset) now writes UTC `Z` too 🟢 |
-| KB-12 | Seerr #3273 "anchor day diff to UTC midnight", Ruddarr "wrong date in the calendar" | Calendar: Radarr's `inCinemas`, `digitalRelease`, `physicalRelease` are days sent as midnight UTC. Converting them to local time puts them on the previous day west of UTC. | `test_calendar_movie_dates_are_days_not_instants` (gateway), `web/tests/calendar.test.mjs` | New | Movie dates are taken as the date part, never converted |
-| KB-13 | Ruddarr calendar (`airDateUtc`) | Calendar: an episode at 21:00 in New York is 02:00 UTC the next day. Asking Sonarr for whole UTC days drops it at the edges, and bucketing by UTC puts it on the wrong day. | `test_calendar_episode_times_follow_viewer_timezone`, `test_calendar_range_edges_keep_late_episodes` | New | Ask Sonarr for the range padded by a day; bucket `airDateUtc` in the viewer's IANA timezone |
-| KB-14 | Common Python-in-Docker failure (`ZoneInfoNotFoundError` on slim images) | The calendar needs IANA timezones; slim images may have no tz database. A bad `tz` from a browser must not 500. | `test_calendar_unknown_timezone_falls_back_to_utc` | New | `tzdata` in requirements.txt; an unknown zone falls back to UTC and says so in the response |
-| KB-15 | Ruddarr "calendar day highlight not updating at midnight", "current date not updating", "check calendar date on becoming active", "refresh calendar when resuming"; Gotify "update date-times on app resume" | Calendar left open overnight or resumed the next day keeps yesterday as Today. | `web/tests/calendar.test.mjs` (today is recomputed from the clock, not stored) | New | Recompute today on `visibilitychange` / scene phase active and on a timer at the next local midnight; reload when the day changed |
-| KB-16 | Common in JavaScript date code | Building a list of days by adding 86,400 s skips or repeats a day across a daylight saving change. | `web/tests/calendar.test.mjs` and gateway test over the October/March DST weekends | New | Step by calendar day, not by seconds |
+| KB-12 | Seerr #3273 "anchor day diff to UTC midnight", Ruddarr "wrong date in the calendar" | Calendar: Radarr's `inCinemas`, `digitalRelease`, `physicalRelease` are days sent as midnight UTC. Converting them to local time puts them on the previous day west of UTC. | `test_calendar_movie_dates_are_days_not_instants` (gateway, `backend/tests/test_calendar.py`), `web/tests/calendar.test.mjs` | New: FAIL (no route) → built, PASS | Movie dates are taken as the date part, never converted |
+| KB-13 | Ruddarr calendar (`airDateUtc`) | Calendar: an episode at 21:00 in New York is 02:00 UTC the next day. Asking Sonarr for whole UTC days drops it at the edges, and bucketing by UTC puts it on the wrong day. | `test_calendar_episode_times_follow_viewer_timezone`, `test_calendar_range_edges_keep_late_episodes` | New: FAIL (no route) → built, PASS | Ask Sonarr for the range padded by a day; bucket `airDateUtc` in the viewer's IANA timezone |
+| KB-14 | Common Python-in-Docker failure (`ZoneInfoNotFoundError` on slim images) | The calendar needs IANA timezones; slim images may have no tz database. A bad `tz` from a browser must not 500. | `test_calendar_unknown_timezone_falls_back_to_utc` | New: FAIL (no route) → built, PASS | `tzdata` in requirements.txt; an unknown zone falls back to UTC and says so in the response |
+| KB-15 | Ruddarr "calendar day highlight not updating at midnight", "current date not updating", "check calendar date on becoming active", "refresh calendar when resuming"; Gotify "update date-times on app resume" | Calendar left open overnight or resumed the next day keeps yesterday as Today. | `web/tests/calendar.test.mjs` (today is recomputed from the clock, not stored) | New: FAIL (no web helpers) → built, PASS 🟢 iOS | Recompute today on `visibilitychange` / scene phase active and on a timer at the next local midnight; reload when the day changed |
+| KB-16 | Common in JavaScript date code | Building a list of days by adding 86,400 s skips or repeats a day across a daylight saving change. | `web/tests/calendar.test.mjs` and gateway test over the October/March DST weekends | New: FAIL (no route / helpers) → built, PASS | Step by calendar day, not by seconds |
 
 ### C. Data and decoding
 
@@ -65,15 +65,15 @@ Ideas only: no code or assets were copied from any of them.
 
 Every Ruddarr calendar fix becomes a requirement here, tested before the Calendar exists.
 
-| ID | Seen in Ruddarr | Requirement | Test |
-|---|---|---|---|
-| KB-30 | "Reset calendar events after modifying instances", "calendar/queue not updating instances when changed" | Removing or changing a Radarr/Sonarr connection drops that service's calendar entries straight away (no stale cache) | `test_calendar_follows_connection_changes` |
-| KB-31 | "Improved calendar error handling", "hide calendar error when list isn't empty" | One service down: the other's entries still show, with a small notice naming the one that failed. Never a full-screen error when there is something to show | `test_calendar_partial_failure_keeps_other_service` |
-| KB-32 | "Collapse episodes bundles in calendar" | A season dropped all at once shows as one entry ("8 episodes") per show per day | `test_calendar_collapses_episode_bundles` |
-| KB-33 | "Support hiding specials in calendar" | Specials are marked so the frontend can hide them (a filter, remembered per device) | gateway test + `calendar.test.mjs` |
-| KB-34 | "Fade unmonitored items", "Sort monitored calendar items before unmonitored", "Persist Monitored filter", "Fixed checking series monitoring status" | Unmonitored entries are faded and listed after monitored ones; series monitoring counts as well as episode monitoring | gateway test + `calendar.test.mjs` |
-| KB-35 | "Fixed calendar loading on cold starts", "Smoother initial calendar tab load", "Avoid initial calendar scroll" | The calendar opens on today without a jump, and a slow first load shows a placeholder, not an error | Checked by hand in a phone-sized browser |
-| KB-36 | "Update events after refreshing calendar data", "Fixed search results not updating after adding media" | Requesting a title from the calendar updates its entry (status comes from the same snapshot as everywhere else) | `test_calendar_entries_carry_status` |
+| ID | Seen in Ruddarr | Requirement | Test | First run |
+|---|---|---|---|---|
+| KB-30 | "Reset calendar events after modifying instances", "calendar/queue not updating instances when changed" | Removing or changing a Radarr/Sonarr connection drops that service's calendar entries straight away (no stale cache) | `test_calendar_follows_connection_changes` | New: FAIL (no route) → built, PASS |
+| KB-31 | "Improved calendar error handling", "hide calendar error when list isn't empty" | One service down: the other's entries still show, with a small notice naming the one that failed. Never a full-screen error when there is something to show | `test_calendar_partial_failure_keeps_other_service` | New: FAIL (no route) → built, PASS |
+| KB-32 | "Collapse episodes bundles in calendar" | A season dropped all at once shows as one entry ("8 episodes") per show per day | `test_calendar_collapses_episode_bundles` | New: FAIL (no route) → built, PASS |
+| KB-33 | "Support hiding specials in calendar" | Specials are marked so the frontend can hide them (a filter, remembered per device) | gateway test + `calendar.test.mjs` | New: FAIL (no route / helpers) → built, PASS |
+| KB-34 | "Fade unmonitored items", "Sort monitored calendar items before unmonitored", "Persist Monitored filter", "Fixed checking series monitoring status" | Unmonitored entries are faded and listed after monitored ones; series monitoring counts as well as episode monitoring | gateway test + `calendar.test.mjs` | New: FAIL (no route / helpers) → built, PASS |
+| KB-35 | "Fixed calendar loading on cold starts", "Smoother initial calendar tab load", "Avoid initial calendar scroll" | The calendar opens on today without a jump, and a slow first load shows a placeholder, not an error | Checked by hand in a phone-sized browser | New: built; checked by hand (Chromium, iPhone 13 viewport) 🟢 iOS |
+| KB-36 | "Update events after refreshing calendar data", "Fixed search results not updating after adding media" | Requesting a title from the calendar updates its entry (status comes from the same snapshot as everywhere else) | `test_calendar_entries_carry_status` | New: FAIL (no route) → built, PASS |
 
 ## Debug features (from Ruddarr's bug report sheet, network diagnostics and decode-failure capture)
 
@@ -106,3 +106,21 @@ Filled in as each test is written and run (first run before any fix).
 - **KB-21 PASS.** Specials are never monitored for "first" or "latest" (also when listed last), and `season_count` leaves them out.
 - **KB-22 FAIL → fixed.** For an HTML login page answering `/api/v3/queue/details` with 200, the only WARNING was "Radarr is DOWN: … answered, but not with the Radarr API (got non-JSON)", without the call, status or body. Fixed: `log.arr_non_json` names service, method, path, status, content type and the start of the body, redacted before it's logged.
 - **KB-23 PASS.** A 500 whose message carries `apikey=…` (an unregistered indexer key and Radarr's own key) never reached a formatted log line in refresh or the idle check. (The test's own handler first lacked the request-id filter; that was a test bug, fixed before recording the result.)
+
+### Calendar (KB-12..16, KB-30..36)
+
+Tests written first in `backend/tests/test_calendar.py` (18 tests) and `web/tests/calendar.test.mjs` (10 tests), committed before any calendar code.
+
+- **First run:** 17 of 18 gateway tests failed (`GET /v1/calendar` answered 404); `test_calendar_is_fetched_on_demand_never_polled` passed (the poller never called the calendar, and now guards it). The web test file failed to load (`web/js/calendar.js` did not exist).
+- **After building:** all 18 gateway tests, the extra route test in `test_gateway.py` and all 10 web tests pass.
+- KB-12: movie release dates take the date part only (`app/calendar.py` `movie_entries`; web `dayHeading` formats day keys in UTC).
+- KB-13: Radarr/Sonarr are asked for the local range padded by `calendar.pad_days` each side; `airDateUtc` is converted with `zoneinfo`.
+- KB-14: `tzdata` in `backend/requirements.txt`; an unknown zone answers in UTC with `tz_fallback: true`.
+- KB-15: web `dayWatcher` (midnight timer + `visibilitychange`); iPhone `.task(id: today)` timer + scene phase 🟢.
+- KB-16: days are stepped as dates on both sides (`days_between`, `addDays` on UTC dates, `CalendarDates.addDays`).
+- KB-30: `CalendarCache.clear(service)` in `Gateway._set_client`, `remove_config` and after a successful request; TTL `calendar.cache_ttl`.
+- KB-31: per-service `{configured, ok, error}`; errors (and non-list answers) are never cached; frontends show a notice, not a full-screen error.
+- KB-32: one entry per show, season and local day with `episodes [first, last]` and `count`.
+- KB-33/34: `special`, `monitored` (episode and series), ordering monitored → all-day → time → title; filters remembered per device.
+- KB-35: the list is placed on Today before the first paint; checked frame by frame in Chromium (first frame with the list was already on Today). iPhone: hidden until `scrollTo` 🟢.
+- KB-36: `status` comes from the live snapshot on every response (the cached part is only the raw Arr answer); the frontends read the store's live status.

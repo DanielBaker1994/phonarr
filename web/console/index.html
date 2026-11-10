@@ -154,6 +154,11 @@ const ENDPOINTS = [
         { name: "If-None-Match", in: "header", value: "" }] },
   { group: "Status", method: "GET", path: "/v1/activity", safe: true,
     desc: "In flight, failed and recently added, as shown on the Activity tab." },
+  { group: "Status", method: "GET", path: "/v1/calendar", safe: true,
+    desc: "Releases per local day: film cinema/digital/physical dates and episodes (bundles collapsed), each with its live status. Empty start/end = 7 days back to 30 ahead. Fetched from Radarr/Sonarr on demand, never polled.",
+    p: [{ name: "start", in: "query", value: "" },
+        { name: "end", in: "query", value: "" },
+        { name: "tz", in: "query", value: "Europe/London", options: ["Europe/London", "America/New_York", "Asia/Tokyo", "UTC"] }] },
 
   { group: "API check", method: "GET", path: "/v1/compat", safe: true,
     desc: "The last API compatibility report per server." },

@@ -13,6 +13,7 @@ const P = {
   copy: "M9 9h11v11H9zM5 15H4V4h11v1",
   logs: "M4 5h16M4 10h16M4 15h10M4 20h7",
   upload: "M12 20V9M7 13.5l5-5 5 5M5 4h14",
+  calendar: "M4 6h16v14H4zM4 10h16M8 3v5M16 3v5M8 14h2M14 14h2M8 17h2",
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5V12l3 2",
   pause: "M9 6v12M15 6v12",
   alert: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5v5.5M12 16.2v.3",

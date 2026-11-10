@@ -248,6 +248,12 @@ final class APIClient: @unchecked Sendable {
 
     func activity() async throws -> ActivityResponse { try await get("v1/activity", query: [.init(name: "viewing", value: "activity")]) }
 
+    /// Releases per local day (start/end "yyyy-MM-dd", tz an IANA zone). Fetched on demand, never polled.
+    func calendar(start: String, end: String, tz: String) async throws -> CalendarResponse {
+        try await get("v1/calendar", query: [.init(name: "start", value: start), .init(name: "end", value: end),
+                                             .init(name: "tz", value: tz)])
+    }
+
     func requestPlan(_ type: MediaType) async throws -> RequestPlan {
         try await get("v1/request-plan", query: [.init(name: "type", value: type.rawValue)])
     }

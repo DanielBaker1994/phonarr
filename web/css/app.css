@@ -493,3 +493,35 @@ details.feature[open] summary { margin-bottom: 6px; }
 /* A select row opens its picker from anywhere right of the label: on iOS a tap on the <label> alone doesn't open it. */
 .frow:has(> select.row-value) .row-label { flex: 0 1 auto; }
 .frow > select.row-value { flex: 1 1 auto; align-self: stretch; min-height: 44px; max-width: none; margin: -8px 0; }
+
+/* ---------------------------------------------------------------- Activity: Downloads | Calendar */
+.segmented { display: flex; margin: 0 16px; padding: 2px; border-radius: 9px; background: var(--surface-2); }
+.segmented > button { flex: 1; min-height: 32px; padding: 0 10px; border-radius: 7px; font-size: 14px; font-weight: 500; color: var(--text); }
+.segmented > button.on { background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); font-weight: 600; }
+.segmented.small { margin: 0; flex: none; }
+.segmented.small > button { min-height: 28px; font-size: 13px; padding: 0 12px; }
+@media (min-width: 900px) { .page-body > .segmented { margin-left: 12px; margin-right: 12px; max-width: 420px; } }
+
+.calendar { display: flex; flex-direction: column; gap: 14px; }
+.cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 16px; }
+.cal-toolbar .chip.small-toggle { padding: 5px 10px; font-size: 13px; }
+.cal-day-head {
+  position: sticky; top: var(--cal-top, 0px); z-index: 5;
+  padding-top: 6px; background: var(--bg);
+}
+.cal-day.is-today .cal-day-head { color: var(--accent); font-weight: 700; }
+.cal-entry { align-items: center; }
+.cal-entry.unmonitored > :not(.icon) { opacity: 0.5; }
+.cal-thumb { width: 40px; height: 60px; }
+.cal-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 99px; font-size: 11.5px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+.cal-chip.good { background: var(--good-soft); color: var(--good); }
+.cal-chip.bad { background: var(--bad-soft); color: var(--bad); }
+.cal-chip.accent { background: var(--accent-soft); color: var(--text); }
+.cal-none { padding: 12px 14px; }
+.cal-more { align-self: center; background: none; }
+.skeleton, .skeleton-bar { background: var(--surface-2); animation: cal-pulse 1.2s ease-in-out infinite alternate; }
+.skeleton-bar { display: block; height: 12px; width: 70%; border-radius: 6px; }
+.skeleton-bar.short { width: 40%; }
+@keyframes cal-pulse { from { opacity: 1; } to { opacity: 0.45; } }
+@media (min-width: 900px) { .cal-toolbar { margin-left: 12px; margin-right: 12px; } .calendar { max-width: 960px; } }

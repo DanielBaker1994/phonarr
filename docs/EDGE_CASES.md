@@ -106,6 +106,25 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | iPhone app crashes | MetricKit report saved into the log folder on the next launch, included in the debug report | 🟢 not compiled yet |
 | GHCR package private | `docker compose pull` is denied until the server logs in (docs/DEPLOYMENT.md §2.3) | 🟢 documented |
 
+## Calendar
+| Case | Behaviour | |
+|---|---|---|
+| Film release date west of UTC (Radarr sends `2026-11-12T00:00:00Z`) | Shown on the 12th everywhere: release dates are days, never converted | ✅ `test_calendar_movie_dates_are_days_not_instants`, `calendar.test.mjs` |
+| Episode at 02:00 UTC seen from New York or Tokyo | 21:00 the day before in New York, 11:00 the same day in Tokyo | ✅ `test_calendar_episode_times_follow_viewer_timezone` |
+| Late episode at the edge of the range | Radarr/Sonarr are asked for the range padded by a day each side, then entries are filtered to the local range | ✅ `test_calendar_range_edges_keep_late_episodes` |
+| Episode without `airDateUtc` | Its `airDate`, with no time | ✅ `test_calendar_episode_without_utc_time_uses_air_date` |
+| Unknown or junk `tz` | UTC, `tz_fallback: true`, a notice in the frontends; never a 500. `tzdata` is installed so slim images know every zone | ✅ `test_calendar_unknown_timezone_falls_back_to_utc` |
+| Daylight saving weekends (Europe/London, America/New_York, both directions) | Every day once, in order; times follow the offset change | ✅ `test_calendar_days_step_by_calendar_day_over_dst_*`, `calendar.test.mjs` |
+| Bad `start`/`end`, end before start, more than 92 days | 422 in the usual error envelope | ✅ `test_calendar_default_range_and_validation` |
+| Connection changed or removed | That server's cached calendar is dropped straight away | ✅ `test_calendar_follows_connection_changes` |
+| One server down, or both | The other's entries plus that server's error in `services`; both down is still a 200. Errors are never cached | ✅ `test_calendar_partial_failure_keeps_other_service` |
+| A season released at once | One entry per show, season and day ("8 episodes") | ✅ `test_calendar_collapses_episode_bundles` |
+| Episode monitored but series unmonitored | Unmonitored (faded, listed last) | ✅ `test_calendar_orders_monitored_first_and_counts_series_monitoring` |
+| Requested or downloading while the Calendar is open | Status comes from the live snapshot, not the cached calendar | ✅ `test_calendar_entries_carry_status` |
+| The poller | Never calls `/api/v3/calendar` | ✅ `test_calendar_is_fetched_on_demand_never_polled` |
+| Calendar left open overnight, or resumed days later | Today moves and the list reloads | ✅ web (`calendar.test.mjs`), 🟢 iPhone |
+| Opening on Today without a jump | Placed before the first paint (checked frame by frame in Chromium, iPhone 13 viewport) | 🟢 web checked by hand, iPhone not compiled |
+
 ## Not handled yet
 - ⏳ Push notifications when a download finishes. This needs the paid account plus APNs, or a self-hosted ntfy.
 - ⏳ Several Radarr or Sonarr instances (for example a 4K instance).

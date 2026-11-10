@@ -164,6 +164,8 @@ export const api = {
     return { snapshot, etag: res.headers.get("ETag"), pollAfter: snapshot.next_poll_seconds ?? pollAfter };
   },
   activity: () => api.json("/v1/activity", { query: { viewing: "activity" } }),
+  /** Releases per local day; tz is this device's IANA zone. Fetched on demand, never polled. */
+  calendar: (start, end, tz) => api.json("/v1/calendar", { query: { start, end, tz } }),
 
   compatReports: () => api.json("/v1/compat"),
   runCompatCheck: () => api.json("/v1/compat/check", { method: "POST", long: true }),

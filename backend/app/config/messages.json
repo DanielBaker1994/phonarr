@@ -8,7 +8,6 @@
     "bad_type": "type must be movie or series",
     "choose_title": "Choose at least one title.",
     "batch_max": "At most {max} titles per batch.",
-    "nothing_to_retry": "Nothing to retry for this title.",
     "auth": "Invalid or missing gateway token.",
     "unknown_service": "Unknown service",
     "bad_sort": "sort must be one of {sorts}",
@@ -47,7 +46,8 @@
     "url_query": "The base URL should not contain a query string or fragment.",
     "dns_hint_docker": " That looks like a Docker service name. It only resolves while that container is running and on the same Docker network as the gateway. Check it's up (docker ps), and check `networks:` for the phonarr service (docker inspect {host_only} shows its networks).",
     "refused_localhost": "Could not connect to {host}. Inside Docker, localhost means the Phonarr container itself, not {name}. Use the Docker service name (e.g. http://{name_lower}:{port}) or the server's LAN address.",
-    "http_error_detail": "{name} returned HTTP {status}: {detail}"
+    "http_error_detail": "{name} returned HTTP {status}: {detail}",
+    "bad_lookup": "{name} answered the search with something that isn't a list of results (it may be starting up). Try again in a moment."
   },
   "log": {
     "no_token": "No ARR_GATEWAY_TOKEN set. Generated one and saved it to {path}",
@@ -82,7 +82,10 @@
     "env_ignored": "{service} URL from the environment ({env}) differs from the saved connection; keeping the saved one. Change it in Settings, or remove the saved connection to re-seed from the environment.",
     "privileges_dropped": "Running as uid {uid} gid {gid}",
     "chowned": "Gave uid {uid} ownership of {path}",
-    "secret_file_unreadable": "Could not read {name} ({path}): {error}"
+    "secret_file_unreadable": "Could not read {name} ({path}): {error}",
+    "add_landed": "{service} didn't answer the add of {media_type} {id} ({error}), but the title is in its library now: linked it",
+    "missing_unconfirmed": "{title} is missing from the {service} library ({count} of {needed} reads in a row); keeping its last status until confirmed",
+    "arr_non_json": "{service} {method} {path} -> {status} answered non-JSON ({type}): {snippet}"
   },
   "compat": {
     "server_error": "The server answered with its own error (HTTP {status}), so fields couldn't be checked: {message}. This is usually not an API change; check System → Status in that app.",

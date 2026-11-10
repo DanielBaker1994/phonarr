@@ -73,6 +73,7 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | D2 | In progress row after a reload | Comes from Activity, so requested titles stay visible even though the catalogue now hides them | `DiscoverView.inProgress` | 🔧 was built from the catalogue only and emptied after a refresh |
 | D3 | Tap poster | Details (§6) | `PosterCell` | ✅ |
 | D4 | Tap + | Adds with defaults; spinner badge → Searching → progress; toast "Added to library" | `PosterCell.quickAction`, `AppModel.add` | ✅ 📱 check the + doesn't also open details |
+| D4a | + and the connection drops before the gateway answers | The title goes back to how it was (not Failed), toast "Couldn't reach the gateway. It may not have been added; tap + to try again." The next + re-sends the same request (same idempotency key), and the next status poll shows it if the gateway did get it | `AppModel.add`, `web/js/store.js::add` | 🔧 used to show Failed for good and send the next tap to Retry (KB-01) |
 | D5 | + while that server is unreachable | No + shown; the orange banner explains | `PosterCell.quickAction` | 🔧 + used to stay and every tap failed |
 | D6 | + with no usable default | Opens Customize for that title | `PosterCell.quickAction` | ✅ |
 | D7 | Long-press | Add (subtitle: "Uses HD-1080p · /movies"), Customize Request…, Retry on failed | `PosterCell.menu` | ✅ |
@@ -90,7 +91,8 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | G3 | Search 1 character | Local title filter only | `MediaGridView.runSearch` | ✅ |
 | G4 | Search 2+ characters | Local matches, then "From Radarr search" with anything else Radarr/Sonarr can find (debounced 450 ms). Each can be added | `MediaGridView`, `AppModel.search`, `backend/app/service.py::search` | ✅ |
 | G5 | Search finds nothing more | "No other matches for “…”" | `MediaGridView` | ✅ |
-| G6 | Search while Radarr is down | Orange message under the search heading | `MediaGridView` | ✅ |
+| G6 | Search while Radarr is down, or Radarr answers the search with an error or `null` | Orange message under the search heading; the bad answer is never cached, so the next search tries again | `MediaGridView`, `backend/app/service.py::search` | ✅ |
+| G6a | Keep typing while a search is running | The older search is cancelled quietly: no "cancelled" error text, and the spinner never sticks | `MediaGridView.runSearch`, `AppModel.search` | 🔧 iPhone showed the cancellation as an error and could leave the spinner on (KB-05) 📱 |
 | G7 | Tap **Select** (or long-press → Select) | Tab bar hides; checkmark circles appear; title shows "N selected"; Select All / Deselect All; Done | `MediaGridView.toolbar` | ✅ 📱 |
 | G8 | Tap a poster in select mode | Ticks it (haptic). Requested titles are dimmed and can't be ticked; failed ones can (they'll be retried) | `PosterCell` selection branch | ✅ |
 | G9 | Selection bar | "Uses HD-1080p · /movies", **Options…**, **Add N** (or "Retry N" if all are failed) | `MediaGridView.selectionBar` | ✅ |

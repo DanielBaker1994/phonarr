@@ -22,6 +22,9 @@ final class AppModel {
     var services: [String: ServiceHealth] = [:]
     private(set) var statuses: [String: MediaStatus] = [:]
     private var inFlight: [String: String] = [:]   // key -> idempotency key
+    /// key -> idempotency key of an add whose answer never arrived (connection lost mid-request).
+    /// The next tap sends the same key, so the gateway can tell it's the same request (KB-01).
+    private var unansweredAdds: [String: String] = [:]
 
     // MARK: Discovery
     var catalog: [MediaType: [MediaCard]] = [:]
@@ -199,6 +202,8 @@ final class AppModel {
             let found = r.items.filter { $0.source == DiscoverySource.search.rawValue }
             for item in found where statuses[item.key] == nil { statuses[item.key] = item.status }
             return (found, r.error?.message)
+        } catch is CancellationError {
+            return ([], nil)   // typing started a newer search, which answers instead (KB-05)
         } catch {
             report(error, toast: false)
             return ([], error.localizedDescription)
@@ -230,23 +235,35 @@ final class AppModel {
             return
         }
         guard current.state == .notRequested else { return }
-        let idem = UUID().uuidString
+        let before = statuses[key]
+        let idem = unansweredAdds[key] ?? UUID().uuidString
         inFlight[key] = idem
         defer { inFlight[key] = nil }
         do {
             AppLog.info("request", ["key": key, "profile": override?.qualityProfileId.map(String.init) ?? "default",
                                    "root": override?.rootFolder ?? "default", "seasons": override?.seasonMonitor ?? "default"])
             let r = try await api.request(type, id: id, override: override, idempotencyKey: idem)
+            unansweredAdds[key] = nil
             statuses[key] = r.status
             AppLog.info("request_result", ["key": key, "state": r.status.state.rawValue, "dedup": r.deduplicated ? " (already tracked)" : ""])
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             toast = r.deduplicated ? "Already in your library" : "Added to library"
         } catch {
             AppLog.error("request_failed", ["key": key, "error": error.localizedDescription])
-            statuses[key] = MediaStatus(state: .failed, message: error.localizedDescription,
-                                        errorKind: (error as? APIError)?.kind)
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
-            if case APIError.unauthorized = error { handleAuthFailure() }
+            if case APIError.transport(_) = error {
+                // We can't tell whether the gateway got it, so don't claim Failed: put the title back as it
+                // was, keep the key for the next tap, and let the poll below show what really happened.
+                unansweredAdds[key] = idem
+                statuses[key] = before
+                toast = AppConfig.text("errors.add_unreached")
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            } else {
+                unansweredAdds[key] = nil
+                statuses[key] = MediaStatus(state: .failed, message: error.localizedDescription,
+                                            errorKind: (error as? APIError)?.kind)
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                if case APIError.unauthorized = error { handleAuthFailure() }
+            }
         }
         refreshNow()
     }

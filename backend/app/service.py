@@ -45,6 +45,9 @@ WATCHING_WINDOW = cfg("gateway.poll.watching_window")
 IDLE_HEALTH_CHECK = cfg("gateway.poll.idle_health_check")
 DOWN_REMINDER_EVERY = cfg("gateway.down_reminder_every")  # repeat the "still down" log line this often
 POLLER_ERROR_BACKOFF = cfg("gateway.poller_error_backoff")
+# A requested title missing from this many successful library reads in a row is "No longer in Radarr";
+# fewer is treated as a bad answer (Radarr restarting, database locked) and the last status is kept.
+MISSING_CONFIRMATIONS = cfg("gateway.missing_confirmations")
 
 ACTIVE_STATES = {"queued", "downloading", "importing", "paused", "stalled"}
 
@@ -176,6 +179,8 @@ STATE_PRIORITY = ["failed", "downloading", "importing", "stalled", "paused", "qu
 
 
 class Gateway:
+    # Durations, TTLs and cooldowns use time.monotonic(), which never jumps when the wall clock is corrected
+    # (VM resume, NTP). time.time() is only for timestamps that are shown or stored (KB-10).
     def __init__(self, db: Database, titles: TitleList, transport: httpx.AsyncBaseTransport | None = None):
         self.db = db
         self.titles = titles
@@ -192,8 +197,10 @@ class Gateway:
         self._title_locks: dict[tuple[str, int], asyncio.Lock] = {}
         self._refresh_lock = asyncio.Lock()
         self.wake = asyncio.Event()
-        self.last_seen = 0.0
-        self.last_watching = 0.0
+        self.last_seen: float | None = None       # monotonic
+        self.last_watching: float | None = None   # monotonic
+        self.snapshot_at: float | None = None     # monotonic time of the last snapshot
+        self._missing: dict[str, int] = {}        # "movie:603" -> library reads in a row without it
         self.polls = 0
         self._last_retry: dict[tuple[str, int], float] = {}
         self._compat_task: asyncio.Task | None = None
@@ -337,7 +344,7 @@ class Gateway:
     # ----------------------------------------------------------------- options
     async def service_options(self, service: str, force: bool = False) -> dict:
         cached = self._options.get(service)
-        if cached and not force and time.time() - cached[0] < OPTIONS_TTL:
+        if cached and not force and time.monotonic() - cached[0] < OPTIONS_TTL:
             return cached[1]
         c = self.client(service)
         profiles, roots = await asyncio.gather(c.get("/api/v3/qualityprofile"), c.get("/api/v3/rootfolder"))
@@ -349,7 +356,7 @@ class Gateway:
         if service == "sonarr" and c.major_version and c.major_version < 4:
             langs = await c.get("/api/v3/languageprofile")
             opts["language_profiles"] = [{"id": p["id"], "name": p["name"]} for p in langs or []]
-        self._options[service] = (time.time(), opts)
+        self._options[service] = (time.monotonic(), opts)
         return opts
 
     def defaults(self) -> dict:
@@ -416,11 +423,11 @@ class Gateway:
     # ----------------------------------------------------------------- library
     async def library(self, service: str, force: bool = False) -> list[dict]:
         cached = self._library.get(service)
-        if cached and not force and time.time() - cached[0] < LIBRARY_TTL:
+        if cached and not force and time.monotonic() - cached[0] < LIBRARY_TTL:
             return cached[1]
         path = "/api/v3/movie" if service == "radarr" else "/api/v3/series"
         items = await self.client(service).get(path) or []
-        self._library[service] = (time.time(), items)
+        self._library[service] = (time.monotonic(), items)
         return items
 
     async def find_in_library(self, media_type: str, external_id: int, force: bool = False) -> dict | None:
@@ -444,10 +451,13 @@ class Gateway:
                     return None
                 raise
             if isinstance(data, list):
-                data = next((d for d in data if d.get("tmdbId") == external_id), None)
+                data = next((d for d in data if isinstance(d, dict) and d.get("tmdbId") == external_id), None)
+            elif not isinstance(data, dict) or data.get("tmdbId") != external_id:
+                data = None     # an error object or null is never cached as metadata
         else:
-            results = await self.client("sonarr").get("/api/v3/series/lookup", term=f"tvdb:{external_id}")
-            data = next((d for d in results or [] if d.get("tvdbId") == external_id), None)
+            results = self._lookup_list("sonarr", await self.client("sonarr").get(
+                "/api/v3/series/lookup", term=f"tvdb:{external_id}"))
+            data = next((d for d in results if d.get("tvdbId") == external_id), None)
         if data:
             self.db.save_metadata(media_type, external_id, data)
         return data
@@ -473,14 +483,14 @@ class Gateway:
 
     async def radarr_discover(self, force: bool = False) -> list[dict]:
         """Radarr's own Discover feed: movies from your import lists plus its recommendations."""
-        if self._discover_cache and not force and time.time() - self._discover_cache[0] < POOL_TTL:
+        if self._discover_cache and not force and time.monotonic() - self._discover_cache[0] < POOL_TTL:
             return self._discover_cache[1]
         items = await self.client("radarr").get("/api/v3/importlist/movie", includeRecommendations="true") or []
         items = [m for m in items if m.get("tmdbId") and not m.get("isExcluded")]
         for m in items:   # same shape as a lookup: saves a lookup when the title is opened or requested
             if not m.get("isExisting"):
                 self.db.save_metadata("movie", m["tmdbId"], m)
-        self._discover_cache = (time.time(), items)
+        self._discover_cache = (time.monotonic(), items)
         return items
 
     @traced
@@ -489,22 +499,30 @@ class Gateway:
         term = term.strip()
         key = (media_type, term.casefold())
         cached = self._search_cache.get(key)
-        if cached and time.time() - cached[0] < SEARCH_TTL:
+        if cached and time.monotonic() - cached[0] < SEARCH_TTL:
             return cached[1]
         service = SERVICE_FOR[media_type]
         path = "/api/v3/movie/lookup" if media_type == "movie" else "/api/v3/series/lookup"
         id_key = "tmdbId" if media_type == "movie" else "tvdbId"
-        raw = await self.client(service).get(path, term=term) or []
+        raw = self._lookup_list(service, await self.client(service).get(path, term=term))
         cards = []
         for r in raw[:40]:
             if not r.get(id_key):
                 continue
             self.db.save_metadata(media_type, r[id_key], r)
             cards.append(self._card(self._normalize(media_type, r), "search"))
-        self._search_cache[key] = (time.time(), cards)
+        self._search_cache[key] = (time.monotonic(), cards)
         if len(self._search_cache) > 200:
             self._search_cache.pop(next(iter(self._search_cache)))
         return cards
+
+    @staticmethod
+    def _lookup_list(service: str, raw: Any) -> list[dict]:
+        """A lookup answer must be a list; an error object or null (Arr starting up) is an error, never an
+        empty result that gets cached."""
+        if not isinstance(raw, list):
+            raise ArrError(service, "unavailable", msg("arr.bad_lookup", name=service.capitalize()))
+        return [r for r in raw if isinstance(r, dict)]
 
     @traced
     async def pool_cards(self, media_type: str) -> tuple[list[dict], dict | None]:
@@ -751,12 +769,18 @@ class Gateway:
             try:
                 created = await self.client(service).post(path, body)
             except ArrError as e:
-                if e.kind == "request" and "already" in e.message.lower():
-                    created = await self.find_in_library(media_type, external_id, force=True)
-                    if not created:
-                        raise
-                else:
+                already = e.kind == "request" and "already" in e.message.lower()
+                if not already and e.kind != "unavailable":
                     raise
+                # Someone else added it first, or the add timed out after Radarr saved it: look once more.
+                try:
+                    created = await self.find_in_library(media_type, external_id, force=True)
+                except ArrError:
+                    created = None
+                if not created:
+                    raise e
+                if not already:
+                    log.info(msg("log.add_landed", service=name, media_type=media_type, id=external_id, error=e.message))
             self.db.upsert_request(media_type, external_id, arr_id=created["id"], error_kind=None, error_message=None)
             log.info(msg("log.requested", media_type=media_type, id=external_id, title=meta["title"], profile=profile, root=root))
         except ArrError as e:
@@ -807,8 +831,8 @@ class Gateway:
         if not service:
             raise GatewayError(422, "request", msg("errors.bad_type"))
         async with self._lock(media_type, external_id):
-            last = self._last_retry.get((media_type, external_id), 0)
-            if time.time() - last < RETRY_COOLDOWN:
+            last = self._last_retry.get((media_type, external_id))
+            if last is not None and time.monotonic() - last < RETRY_COOLDOWN:
                 log.info(msg("log.retry_cooldown", media_type=media_type, id=external_id))
                 return self._request_result(media_type, external_id, deduplicated=True)
             record = self.db.get_request(media_type, external_id)
@@ -817,9 +841,9 @@ class Gateway:
             except ArrError as e:
                 raise GatewayError(503 if e.kind == "unavailable" else 422, e.kind, e.message)
             if not found:
-                if record is None:
-                    raise GatewayError(404, "not_found", msg("errors.nothing_to_retry"))
-                # Confirmed absent from Arr (never added, or removed there): add it now.
+                # Confirmed absent from Arr (never added, removed there, or the add never reached the gateway
+                # because the phone lost its connection): add it now, with the defaults if we never saw it.
+                record = record or {}
                 return await self._submit(media_type, external_id, record.get("quality_profile_id"),
                                           record.get("root_folder"), None)
             client = self.client(service)
@@ -838,7 +862,7 @@ class Gateway:
                 raise GatewayError(503 if e.kind == "unavailable" else 422, e.kind, e.message)
             self.db.upsert_request(media_type, external_id, arr_id=found["id"], title=found.get("title"),
                                    error_kind=None, error_message=None)
-            self._last_retry[(media_type, external_id)] = time.time()
+            self._last_retry[(media_type, external_id)] = time.monotonic()
             log.info(msg("log.retried", media_type=media_type, id=external_id, cleared=len(failed)))
             self._patch_snapshot(media_type, external_id, {"state": "searching", "progress": None,
                                                             "message": "Searching again", "error_kind": None})
@@ -894,6 +918,8 @@ class Gateway:
                     items[key] = st
                     activity.append({"key": key, "lib": lib_item})
             # Request records whose Arr add failed (no Arr record yet) or whose Arr record vanished.
+            missing: dict[str, int] = {k: n for k, n in self._missing.items()
+                                       if services.get(SERVICE_FOR[k.split(":")[0]], {}).get("reachable") is False}
             for rec in self.db.list_requests():
                 key = f"{rec['media_type']}:{rec['external_id']}"
                 svc = SERVICE_FOR[rec["media_type"]]
@@ -903,12 +929,24 @@ class Gateway:
                     items[key] = {"state": "failed", "progress": None, "message": rec["error_message"],
                                   "error_kind": rec["error_kind"]}
                 elif rec["arr_id"]:
-                    items[key] = {"state": "failed", "progress": None, "error_kind": "download",
-                                  "message": f"No longer in {svc.capitalize()}. Retry will add it again."}
+                    # One empty or partial library answer (restarting, database locked) must not orphan every
+                    # request: only reads in a row that agree it's gone count (KB-07).
+                    missing[key] = self._missing.get(key, 0) + 1
+                    if missing[key] >= MISSING_CONFIRMATIONS:
+                        items[key] = {"state": "failed", "progress": None, "error_kind": "download",
+                                      "message": f"No longer in {svc.capitalize()}. Retry will add it again."}
+                    else:
+                        log.info(msg("log.missing_unconfirmed", title=key, service=svc.capitalize(),
+                                     count=missing[key], needed=MISSING_CONFIRMATIONS))
+                        if key in self.snapshot["items"]:
+                            items[key] = self.snapshot["items"][key]
+                        self._library.pop(svc, None)    # read it fresh next cycle, not from the cache
+            self._missing = missing
             for svc, v in services.items():
                 self._note_health(svc, v["reachable"], v["error"])
             self._activity_lib = {a["key"]: a["lib"] for a in activity}
             self.snapshot = {"items": items, "services": services, "generated_at": time.time()}
+            self.snapshot_at = time.monotonic()
             self._recompute_etag()
             self.polls += 1
             return self.snapshot
@@ -944,7 +982,7 @@ class Gateway:
             if not s.get("tvdbId"):
                 continue
             stats = s.get("statistics") or {}
-            have, want = stats.get("episodeFileCount", 0), stats.get("episodeCount", 0)
+            have, want = stats.get("episodeFileCount") or 0, stats.get("episodeCount") or 0
             qs = [classify_queue_item(q) for q in by_series.get(s["id"], [])]
             base = {"episodes_have": have, "episodes_wanted": want}
             if qs:
@@ -994,8 +1032,8 @@ class Gateway:
 
     # ----------------------------------------------------------------- polling
     def note_client(self, viewing: str | None) -> None:
-        now = time.time()
-        was_gone = now - self.last_seen > CLIENT_GONE_AFTER
+        now = time.monotonic()
+        was_gone = self.last_seen is None or now - self.last_seen > CLIENT_GONE_AFTER
         self.last_seen = now
         if viewing == "activity":
             self.last_watching = now
@@ -1006,10 +1044,10 @@ class Gateway:
         return any(v["state"] in ACTIVE_STATES for v in self.snapshot["items"].values())
 
     def poll_interval(self, now: float | None = None) -> float | None:
-        now = now or time.time()
+        now = now or time.monotonic()
         active = self.has_active()
-        client_here = now - self.last_seen < CLIENT_GONE_AFTER
-        watching = now - self.last_watching < WATCHING_WINDOW
+        client_here = self.last_seen is not None and now - self.last_seen < CLIENT_GONE_AFTER
+        watching = self.last_watching is not None and now - self.last_watching < WATCHING_WINDOW
         if active and watching:
             return POLL_WATCHING
         if active and client_here:
@@ -1022,8 +1060,8 @@ class Gateway:
 
     def _note_health(self, service: str, reachable: bool | None, error: dict | None) -> None:
         """Record a reachability result and log the transitions, so the log answers
-        "when did Sonarr go down, why, and when did it come back?"."""
-        now = time.time()
+        "when did Sonarr go down, why, and when did it come back?". Times are monotonic (durations only)."""
+        now = time.monotonic()
         prev = self._service_health.get(service, {})
         entry = {"reachable": reachable, "error": error, "checked_at": now,
                  "down_since": prev.get("down_since"), "reminded_at": prev.get("reminded_at")}
@@ -1069,7 +1107,7 @@ class Gateway:
 
     async def ensure_fresh(self) -> None:
         interval = self.poll_interval() or POLL_FOREGROUND_QUIET
-        if time.time() - self.snapshot["generated_at"] > interval:
+        if self.snapshot_at is None or time.monotonic() - self.snapshot_at > interval:
             await self.refresh_status()
 
     async def run_poller(self) -> None:
@@ -1079,12 +1117,14 @@ class Gateway:
             except asyncio.CancelledError:
                 raise
             except Exception:  # never let the loop die
-                self.last_poll_error_at = time.time()
+                self.last_poll_error_at = time.monotonic()
                 log.exception(msg("log.poller_failed"))
                 await asyncio.sleep(POLLER_ERROR_BACKOFF)
 
     async def _poll_once(self) -> None:
-        if time.time() - (self.db.get_setting("compat_last_run") or 0) > COMPAT_EVERY:
+        # Stored, so wall clock; a last run "in the future" (clock went back) counts as due.
+        since = time.time() - (self.db.get_setting("compat_last_run") or 0)
+        if since > COMPAT_EVERY or since < 0:
             self.schedule_compat()
         interval = self.poll_interval()
         idle = interval is None

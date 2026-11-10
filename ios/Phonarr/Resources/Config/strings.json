@@ -33,6 +33,7 @@
   },
   "errors": {
     "no_response": "No HTTP response",
+    "add_unreached": "Couldn't reach the gateway. It may not have been added; tap + to try again.",
     "http_status": "Gateway returned HTTP {status}.",
     "dns": "Can't find the gateway host. On Tailscale, make sure the VPN is connected.",
     "unreachable": "Can't reach the gateway. Is the container running and the port open?",

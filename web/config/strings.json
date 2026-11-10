@@ -40,6 +40,7 @@
     "unreachable": "Can't reach the gateway. On Tailscale, make sure the VPN is connected.",
     "auth": "The gateway rejected the access token. Check it in Settings.",
     "http_status": "Gateway returned HTTP {status}. Settings → Troubleshooting → Download debug report has the details.",
+    "add_unreached": "Couldn't reach the gateway. It may not have been added; tap + to try again.",
     "bad_response": "Unexpected response from the gateway ({error}).",
     "health_not_json": "Something answered at /v1/health, but not the gateway (HTTP {status}). Is a proxy or another app on this port?",
     "screen_crashed": "This screen hit a bug.",

@@ -9,6 +9,11 @@
     "min_secret_length": 6,
     "area_files": {"api": "api.log"}
   },
+  "calendar": {
+    "past_days": 7,
+    "future_days": 30,
+    "more_days": 14
+  },
   "api": {
     "log_body_chars": 300
   }

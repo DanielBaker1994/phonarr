@@ -3,28 +3,26 @@ import SwiftUI
 struct ActivityView: View {
     @Environment(AppModel.self) private var model
     @State private var loaded = false
+    /// Downloads | Calendar, remembered per device.
+    @AppStorage("activitySegment") private var segment = "downloads"
 
     var body: some View {
         NavigationStack {
-            List {
-                ServiceBanner().listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
-                let failed = model.activity.filter { live($0).state == .failed }
-                let active = model.activity.filter { live($0).state != .failed && live($0).state != .complete }
-                let done = model.activity.filter { live($0).state == .complete }
-                if !failed.isEmpty { Section("Needs attention") { rows(failed) } }
-                if !active.isEmpty { Section("In progress") { rows(active) } }
-                if !done.isEmpty { Section("Recently added") { rows(done) } }
-            }
-            .overlay {
-                if loaded && model.activity.isEmpty {
-                    ContentUnavailableView("No activity", systemImage: "arrow.down.circle",
-                                           description: Text("Requests and downloads show up here."))
-                } else if !loaded {
-                    ProgressView()
+            VStack(spacing: 0) {
+                Picker("Activity", selection: $segment) {
+                    Text(AppConfig.text("calendar.downloads")).tag("downloads")
+                    Text(AppConfig.text("calendar.title")).tag("calendar")
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                if segment == "calendar" {
+                    CalendarView()
+                } else {
+                    downloads
                 }
             }
             .navigationTitle("Activity")
-            .refreshable { await model.loadActivity() }
             .navigationDestination(for: ActivityItem.self) { TitleDetailView(type: $0.type, id: $0.id) }
             .navigationDestination(for: MediaCard.self) { TitleDetailView(type: $0.type, id: $0.id, seed: $0) }
             .task {
@@ -34,6 +32,27 @@ struct ActivityView: View {
             .onAppear { model.beginWatchingActivity() }
             .onDisappear { model.endWatchingActivity() }
         }
+    }
+
+    private var downloads: some View {
+        List {
+            ServiceBanner().listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+            let failed = model.activity.filter { live($0).state == .failed }
+            let active = model.activity.filter { live($0).state != .failed && live($0).state != .complete }
+            let done = model.activity.filter { live($0).state == .complete }
+            if !failed.isEmpty { Section("Needs attention") { rows(failed) } }
+            if !active.isEmpty { Section("In progress") { rows(active) } }
+            if !done.isEmpty { Section("Recently added") { rows(done) } }
+        }
+        .overlay {
+            if loaded && model.activity.isEmpty {
+                ContentUnavailableView("No activity", systemImage: "arrow.down.circle",
+                                       description: Text("Requests and downloads show up here."))
+            } else if !loaded {
+                ProgressView()
+            }
+        }
+        .refreshable { await model.loadActivity() }
     }
 
     private func live(_ item: ActivityItem) -> MediaStatus { model.status(item.type, item.id, fallback: item.status) }

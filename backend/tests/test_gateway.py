@@ -362,7 +362,7 @@ def test_adaptive_poll_interval(client, fake):
     gw = client.app.state.gateway
     now = 1_000_000.0
     gw.snapshot["items"] = {}
-    gw.last_seen = gw.last_watching = 0
+    gw.last_seen = gw.last_watching = None   # never seen (monotonic clock: 0 is not "long ago" on a fresh host)
     assert gw.poll_interval(now) is None          # nobody here, nothing active -> stop
     gw.last_seen = now
     assert gw.poll_interval(now) == 60
@@ -799,7 +799,7 @@ def test_health_has_fresh_reachability_when_idle(client, fake):
     configure(client)
     gw = client.app.state.gateway
     client.get("/v1/status", headers=AUTH)
-    gw.last_seen = gw.last_watching = 0
+    gw.last_seen = gw.last_watching = None   # never seen (monotonic clock: 0 is not "long ago" on a fresh host)
     assert gw.poll_interval() is None
     fake.down.add("sonarr.test")
     client.portal.call(gw.check_reachability)

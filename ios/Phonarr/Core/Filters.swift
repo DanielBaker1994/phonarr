@@ -3,12 +3,13 @@ import Foundation
 /// Client-side filtering over the discovery pool for instant results.
 /// Mirrors backend/app/discovery.py and web/js/filters.js so the gateway's /v1/discover filters behave the same.
 enum SortOption: String, CaseIterable, Identifiable, Codable {
-    case title, yearDesc = "year_desc", yearAsc = "year_asc", rating, popularity
+    case trending, title, yearDesc = "year_desc", yearAsc = "year_asc", rating, popularity
     case runtimeAsc = "runtime_asc", runtimeDesc = "runtime_desc", recent
 
     var id: String { rawValue }
     var label: String {
         switch self {
+        case .trending: "New & trending"
         case .title: "Title A–Z"
         case .yearDesc: "Newest first"
         case .yearAsc: "Oldest first"
@@ -195,6 +196,7 @@ struct FilterState: Equatable, Codable {
             }
         }
         switch sort {
+        case .trending: return by({ Trending.score($0) }, descending: true)
         case .title: return cards.sorted(by: byTitle)
         case .yearDesc: return by({ $0.year }, descending: true)
         case .yearAsc: return by({ $0.year }, descending: false)
@@ -249,6 +251,17 @@ enum RatingStrip {
     }
 }
 
+/// New and trending: titles from the last `filters.trending_years` years, scored by TMDB popularity (films) or
+/// total votes across sources (TV has no popularity). Older or unscored titles get nil. Same as discovery.py.
+enum Trending {
+    static func score(_ card: MediaCard, thisYear: Int = Calendar.current.component(.year, from: Date())) -> Double? {
+        guard (card.year ?? 0) > thisYear - AppConfig.int("filters.trending_years", default: 2) else { return nil }
+        if let popularity = card.popularity { return popularity }
+        let votes = (card.votes ?? [:]).values.reduce(0, +)
+        return votes > 0 ? Double(votes) : nil
+    }
+}
+
 /// Discover shelves generated from metadata, so the home screen isn't just "latest" and "popular".
 struct Shelf: Identifiable {
     let id: String
@@ -262,6 +275,9 @@ enum ShelfBuilder {
         func add(_ id: String, _ title: String, _ items: [MediaCard]) {
             if items.count >= minimum { shelves.append(Shelf(id: id, title: title, items: Array(items.prefix(20)))) }
         }
+        let trending = cards.filter { Trending.score($0) != nil }
+            .sorted { (Trending.score($0) ?? 0) > (Trending.score($1) ?? 0) }
+        add("trending", "New & trending", trending)
         let rated = cards.filter { $0.rating != nil }.sorted { ($0.rating ?? 0) > ($1.rating ?? 0) }
         add("rated", "Highest rated", rated)
         add("early", "Before 1930", cards.filter { ($0.year ?? 9999) < 1930 }.sorted { ($0.year ?? 0) < ($1.year ?? 0) })

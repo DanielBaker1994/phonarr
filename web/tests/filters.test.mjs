@@ -1,7 +1,7 @@
 // node --test web/tests/*.test.mjs   (run by ../../test.sh). Checks the client-side filters behave like backend/app/discovery.py.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFilters, buildShelves, emptyFilters, activeCount, sortCards, genreNeighbours, neighboursFor, viaNeighbour, ratingStrip } from "../js/filters.js";
+import { applyFilters, buildShelves, emptyFilters, activeCount, sortCards, genreNeighbours, neighboursFor, viaNeighbour, ratingStrip, trendingScore } from "../js/filters.js";
 
 const cards = [
   { type: "movie", id: 1, title: "Nosferatu", original_title: "Nosferatu, eine Symphonie des Grauens", year: 1922, decade: 1920,
@@ -81,4 +81,20 @@ test("shelves need at least three titles", () => {
   const shelves = buildShelves(cards);
   assert.deepEqual(shelves.map((s) => s.id), ["rated"]);
   assert.deepEqual(ids(shelves[0].items), [1, 3, 4]);
+});
+
+test("New & trending: titles from this year and last, by popularity (films) or total votes (TV), as discovery.py", () => {
+  const pool = [
+    { id: 1, title: "Old hit", year: 2001, popularity: 900 },
+    { id: 2, title: "New film", year: 2026, popularity: 40 },
+    { id: 3, title: "Last year film", year: 2025, popularity: 120 },
+    { id: 4, title: "New show", year: 2026, popularity: null, votes: { tvdb: 30, imdb: 50 } },
+    { id: 5, title: "New, no data", year: 2026 },
+    { id: 6, title: "Three years ago", year: 2024, popularity: 500 },
+  ];
+  assert.equal(trendingScore(pool[0], 2026), null);
+  assert.equal(trendingScore(pool[3], 2026), 80);
+  assert.deepEqual(ids(sortCards(pool, "trending", 2026)), [3, 4, 2, 5, 1, 6]);
+  const shelf = buildShelves(pool, 3, 2026).find((s) => s.id === "trending");
+  assert.deepEqual(ids(shelf.items), [3, 4, 2]);
 });

@@ -7,6 +7,7 @@ from the discovery pool (see sources.py).
 from __future__ import annotations
 
 from collections import Counter
+from datetime import date
 from typing import Any, Iterable
 
 from .config import cfg
@@ -18,7 +19,7 @@ RUNTIME_BUCKETS = {          # minutes
     "long": (120, 10_000),
 }
 
-SORTS = ("title", "year_desc", "year_asc", "rating", "popularity", "runtime_asc", "runtime_desc", "recent")
+SORTS = ("title", "trending", "year_desc", "year_asc", "rating", "popularity", "runtime_asc", "runtime_desc", "recent")
 
 
 def decade(year: int | None) -> int | None:
@@ -140,8 +141,23 @@ def trusted_rating(sources: dict[str, dict], media_type: str) -> float | None:
     return None
 
 
-def sort_cards(cards: list[dict], sort: str | None) -> list[dict]:
+def trending_score(card: dict, this_year: int | None = None) -> float | None:
+    """New and trending: titles from the last `discovery.trending_years` years, scored by TMDB popularity
+    (films) or total votes across sources (TV has no popularity). Older or unscored titles get None."""
+    this_year = this_year or date.today().year
+    if (card.get("year") or 0) <= this_year - cfg("discovery.trending_years"):
+        return None
+    if card.get("popularity") is not None:
+        return float(card["popularity"])
+    votes = sum((card.get("votes") or {}).values())
+    return float(votes) if votes else None
+
+
+def sort_cards(cards: list[dict], sort: str | None, this_year: int | None = None) -> list[dict]:
     title = lambda c: (c["title"] or "").casefold()  # noqa: E731
+    if sort == "trending":   # new and trending first, everything else after by title
+        scored = [(trending_score(c, this_year), c) for c in cards]
+        return [c for _, c in sorted(scored, key=lambda sc: (sc[0] is None, -(sc[0] or 0), title(sc[1])))]
     if sort == "year_desc":
         return sorted(cards, key=lambda c: (-(c.get("year") or 0), title(c)))
     if sort == "year_asc":

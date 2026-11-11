@@ -70,7 +70,7 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 
 | ID | Situation | Expected | Code | |
 |---|---|---|---|---|
-| D1 | Normal | Rows: In progress, Recommended by Radarr, Films to add, TV to add, then generated shelves (Highest rated, decades, genres, Under 90 min) | `Views/BrowseViews.swift` `DiscoverView` | ✅ |
+| D1 | Normal | Rows: In progress, **New & trending** (titles from this year and last, by TMDB popularity for films and total votes for TV; hidden when under 3), Recommended by Radarr, Films to add, TV to add, then generated shelves (Highest rated, decades, genres, Under 90 min) | `Views/BrowseViews.swift` `DiscoverView` | ✅ |
 | D2 | In progress row after a reload | Comes from Activity, so requested titles stay visible even though the catalogue now hides them | `DiscoverView.inProgress` | 🔧 was built from the catalogue only and emptied after a refresh |
 | D3 | Tap poster | Details (§6) | `PosterCell` | ✅ |
 | D4 | Tap + | Adds with defaults; spinner badge → Searching → progress; toast "Added to library" | `PosterCell.quickAction`, `AppModel.add` | ✅ 📱 check the + doesn't also open details |
@@ -88,7 +88,7 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 | ID | Situation | Expected | Code | |
 |---|---|---|---|---|
 | G1 | Browse | Poster grid with + on each, sort menu, filter sheet, removable chips with "N of M". Each poster shows the trusted rating and a small strip of IMDb / TMDB / RT / Meta (TVDB for shows). No cap: a page at a time (60), the next added as you scroll, with a Show more button | `MediaGridView`, `Views/FilterViews.swift`, `web/js/views/browse.js` | ✅ |
-| G2 | Filters | English only (on by default; titles with no language kept), genres (tap: include, again: exclude) with neighbouring genres (overlap ≥ 15%, each can be dropped, cards say "via …"), year as Any / Decades (several) / exact Range, length at least / at most, minimum trusted rating, language (when English only is off), studio/network, collection, certification, series status, **Found in**. Default sort: highest rated. Reset returns to these defaults | `FilterSheet`, `Core/Filters.swift`, `web/js/filters.js` | ✅ web 📱 iPhone (uncompiled) |
+| G2 | Filters | English only (on by default; titles with no language kept), genres (tap: include, again: exclude) with neighbouring genres (overlap ≥ 15%, each can be dropped, cards say "via …"), year as Any / Decades (several) / exact Range, length at least / at most, minimum trusted rating, language (when English only is off), studio/network, collection, certification, series status, **Found in**. Sorts include **New & trending** (same rule as the Discover row; older titles follow by title). Default sort: highest rated. Reset returns to these defaults | `FilterSheet`, `Core/Filters.swift`, `web/js/filters.js` | ✅ web 📱 iPhone (uncompiled) |
 | G3 | Search 1 character | Local title filter only | `MediaGridView.runSearch` | ✅ |
 | G4 | Search 2+ characters | Local matches, then "From Radarr search" with anything else Radarr/Sonarr can find (debounced 450 ms). Each can be added | `MediaGridView`, `AppModel.search`, `backend/app/service.py::search` | ✅ |
 | G5 | Search finds nothing more | "No other matches for “…”" | `MediaGridView` | ✅ |

@@ -41,6 +41,7 @@
       150,
       180
     ],
-    "page_size": 60
+    "page_size": 60,
+    "trending_years": 2
   }
 }

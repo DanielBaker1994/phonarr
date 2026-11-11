@@ -1311,3 +1311,18 @@ def test_calendar_route_needs_token_and_uses_the_error_envelope(client):
     body = client.get("/v1/calendar?start=2026-11-10&end=2026-11-11&tz=Europe/London", headers=AUTH).json()
     assert [d["date"] for d in body["days"]] == ["2026-11-10", "2026-11-11"]
     assert body["services"]["radarr"]["configured"] is False and body["services"]["sonarr"]["configured"] is False
+
+
+def test_trending_sort_new_titles_by_popularity_or_votes():
+    from app.discovery import SORTS, sort_cards, trending_score
+    cards = [
+        {"id": 1, "title": "Old hit", "year": 2001, "popularity": 900.0},
+        {"id": 2, "title": "New film", "year": 2026, "popularity": 40.0},
+        {"id": 3, "title": "Last year film", "year": 2025, "popularity": 120.0},
+        {"id": 4, "title": "New show", "year": 2026, "popularity": None, "votes": {"tvdb": 30, "imdb": 50}},
+        {"id": 5, "title": "New, no data", "year": 2026},
+        {"id": 6, "title": "Three years ago", "year": 2024, "popularity": 500.0},
+    ]
+    assert trending_score(cards[0], 2026) is None and trending_score(cards[3], 2026) == 80.0
+    assert [c["id"] for c in sort_cards(cards, "trending", 2026)] == [3, 4, 2, 5, 1, 6]  # rest by title
+    assert "trending" in SORTS

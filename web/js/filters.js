@@ -4,6 +4,7 @@
 import { cfg } from "./config.js";
 
 export const SORTS = [
+  ["trending", "New & trending"],
   ["title", "Title A–Z"],
   ["year_desc", "Newest first"],
   ["year_asc", "Oldest first"],
@@ -159,8 +160,18 @@ function by(cards, key, descending) {
   });
 }
 
-export function sortCards(cards, sort) {
+/** New and trending: titles from the last `filters.trending_years` years, scored by TMDB popularity (films) or
+ *  total votes across sources (TV has no popularity). Older or unscored titles get null. Same as discovery.py. */
+export function trendingScore(card, thisYear = new Date().getFullYear()) {
+  if ((card.year || 0) <= thisYear - cfg("filters.trending_years", 2)) return null;
+  if (card.popularity != null) return card.popularity;
+  const votes = Object.values(card.votes || {}).reduce((a, b) => a + b, 0);
+  return votes || null;
+}
+
+export function sortCards(cards, sort, thisYear = new Date().getFullYear()) {
   switch (sort) {
+    case "trending": return by(cards, (c) => trendingScore(c, thisYear), true);
     case "year_desc": return by(cards, (c) => c.year, true);
     case "year_asc": return by(cards, (c) => c.year, false);
     case "rating": return by(cards, (c) => c.rating, true);
@@ -173,11 +184,12 @@ export function sortCards(cards, sort) {
 }
 
 /** Discover shelves generated from metadata, so the home screen isn't just "latest" and "popular". */
-export function buildShelves(cards, minimum = 3) {
+export function buildShelves(cards, minimum = 3, thisYear = new Date().getFullYear()) {
   const shelves = [];
   const add = (id, title, items) => {
     if (items.length >= minimum) shelves.push({ id, title, items: items.slice(0, 20) });
   };
+  add("trending", "New & trending", sortCards(cards.filter((c) => trendingScore(c, thisYear) != null), "trending", thisYear));
   add("rated", "Highest rated", cards.filter((c) => c.rating != null).sort((a, b) => b.rating - a.rating));
   add("early", "Before 1930", cards.filter((c) => (c.year ?? 9999) < 1930).sort((a, b) => (a.year ?? 0) - (b.year ?? 0)));
   add("short", "Under 90 minutes", cards.filter((c) => c.runtime > 0 && c.runtime < 90));

@@ -17,7 +17,7 @@ Richness: ●●● present for nearly every title · ●●○ usually present,
 | `studio` | ●●○ | Production company name | Studio filter, similarity |
 | `originalLanguage {id,name}` | ●●● | v4+ | Language filter, similarity |
 | `ratings {imdb, tmdb, metacritic, rottenTomatoes, trakt}` each `{value, votes}` | ●●○ / ●○○ | IMDb and TMDB usually present. RT and Metacritic rarer. Radarr v3 has a single `{value, votes}` | Trusted rating (IMDb + TMDB by votes), rating strip on posters, rating filter and sort |
-| `popularity` | ●●○ | TMDB popularity score: recency-biased and noisy | "Popular" sort only |
+| `popularity` | ●●○ | TMDB popularity score: recency-biased and noisy | "Popular" sort; "New & trending" sort and Discover row (films from the last `trending_years` years; TV uses total votes instead) |
 | `collection {title, tmdbId}` | ●○○ | Franchises or series, e.g. "Nosferatu Collection". Rare for older titles | "Part of …" similarity, a strong signal when present |
 | `keywords[]` | ●○○ | Present on recent Radarr builds only. Themes like "zombie", "film noir" | Similarity when present ("Similar themes") |
 | `images[]` `poster`, `fanart`, `clearlogo` (`remoteUrl`) | ●●● / ●●○ | TMDB CDN URLs | Artwork |

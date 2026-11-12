@@ -17,12 +17,13 @@ import { downloadDebugReport } from "../debug.js";
 // ------------------------------------------------------------------ sign in
 export function SignInView() {
   const [token, setToken] = useState("");
+  const [remember, setRemember] = useState(S.pref.get("rememberToken", true));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
-    try { await S.pair(token); setError(null); } catch (err) {
+    try { await S.pair(token, remember); setError(null); } catch (err) {
       log.error("signin_failed", { error: err.message });
       setError(err.message);
     }
@@ -44,6 +45,8 @@ export function SignInView() {
         <label class="frow"><input class="grow" type="password" name="password" id="signin-token" placeholder="Access token"
           value=${token} autocomplete="current-password" onInput=${(e) => setToken(e.target.value)} autofocus /></label>
       <//>
+      <${Group} footer=${text("signin.remember_footer")}>
+        <${Toggle} label=${text("signin.remember")} checked=${remember} onChange=${setRemember} /><//>
       ${msg && html`<${Notice} tone="bad">${msg}<//>`}
       <${Group}><button class="frow accent strong" type="submit" disabled=${!token.trim() || busy}>
         <span class="row-label">Sign in</span><span class="row-value">${busy && html`<${Spinner} small />`}</span></button><//>

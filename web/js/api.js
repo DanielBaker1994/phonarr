@@ -17,8 +17,12 @@ export class APIError extends Error {
 
 const TOKEN_KEY = "ayr.token";
 
+/** "Remember me" keeps the token in localStorage (survives closing the browser); otherwise sessionStorage (this tab). */
 function readToken() {
-  try { return localStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; }
+  for (const store of ["localStorage", "sessionStorage"]) {
+    try { const t = globalThis[store].getItem(TOKEN_KEY); if (t) return t; } catch { /* storage blocked */ }
+  }
+  return "";
 }
 
 /** crypto.randomUUID only exists in secure contexts (HTTPS / localhost). Plain HTTP over Tailscale isn't one. */
@@ -34,13 +38,22 @@ export function uuid() {
 export const api = {
   token: readToken(),
 
-  setToken(token) {
+  /** Returns false when the browser refused to store it (site data blocked or cleared on close): the token then
+   * lasts for this page only, and the sign-in screen says so. */
+  setToken(token, remember = true) {
     this.token = token || "";
     registerSecret(this.token);
-    try {
-      if (this.token) localStorage.setItem(TOKEN_KEY, this.token);
-      else localStorage.removeItem(TOKEN_KEY);
-    } catch { /* private mode: token lasts for this tab only */ }
+    const keep = this.token && remember ? "localStorage" : "sessionStorage";
+    let saved = true;
+    for (const store of ["localStorage", "sessionStorage"]) {
+      try {
+        if (this.token && store === keep) {
+          globalThis[store].setItem(TOKEN_KEY, this.token);
+          saved = globalThis[store].getItem(TOKEN_KEY) === this.token;
+        } else globalThis[store].removeItem(TOKEN_KEY);
+      } catch { if (store === keep) saved = false; }
+    }
+    return saved || !this.token;
   },
 
   get paired() { return !!this.token; },

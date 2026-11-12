@@ -71,10 +71,10 @@ function report(error, { show = true } = {}) {
 }
 
 // ------------------------------------------------------------------ pairing / config
-export async function pair(token) {
+export async function pair(token, remember = true) {
   const t = token.trim();
   const previous = api.token;
-  api.setToken(t);
+  const saved = api.setToken(t, remember);
   try {
     state.config = await api.config();
   } catch (e) {
@@ -84,7 +84,9 @@ export async function pair(token) {
   state.paired = true;
   state.pairingMessage = null;
   state.gatewayReachable = true;
-  log.info("signed_in");
+  log.info("signed_in", { remember, saved });
+  pref.set("rememberToken", remember);
+  if (!saved) toast(text("signin.storage_blocked", { host: location.host }));
   // Gateway already set up (another browser or the iPhone app did it): skip the setup steps.
   if (state.config.radarr.configured && state.config.sonarr.configured) setOnboardingComplete(true);
   emit();

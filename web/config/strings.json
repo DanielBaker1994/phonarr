@@ -127,5 +127,10 @@
     "file_name": "Phonarr-logs-{stamp}.txt",
     "tag_gateway": "GW",
     "tag_web": "WEB"
+  },
+  "signin": {
+    "remember": "Remember me on this browser",
+    "remember_footer": "On: you stay signed in after closing the browser. Off: signed out when this tab closes.",
+    "storage_blocked": "This browser didn't let Phonarr save the token, so you'll be asked again next time. In Firefox: click the lock icon next to the address, then Clear cookies and site data, and check Settings → Privacy & Security → Cookies and Site Data (\"Delete cookies and site data when Firefox is closed\" and Manage Exceptions) for {host}."
   }
 }

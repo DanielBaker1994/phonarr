@@ -44,7 +44,7 @@ Paths starting with `backend/` are the gateway. On the web, "tap" also means cli
 
 ## 2. Launch and pairing
 
-On the web, pairing is **sign-in with the token only**: the page is served by the gateway, so its address is already known (`SignInView` in `views/settings.js`). L2 does not apply. The form is a real login form (fixed hidden username `phonarr`, the token as `current-password`), so the browser's password manager offers to save the token and fills it in later, which also helps where browser storage gets cleared or a home-screen web app keeps its own.
+On the web, pairing is **sign-in with the token only**: the page is served by the gateway, so its address is already known (`SignInView` in `views/settings.js`). L2 does not apply. The form is a real login form (fixed hidden username `phonarr`, the token as `current-password`), so the browser's password manager offers to save the token and fills it in later, which also helps where browser storage gets cleared or a home-screen web app keeps its own. A **Remember me on this browser** switch (on by default, its last setting remembered) keeps the token in localStorage; off keeps it in sessionStorage, so closing the tab signs out. If the browser refuses to store it (site data blocked or deleted on close, as Firefox can be set to do), a message after sign-in says so and where to fix it. The iPhone app always keeps the token in the Keychain.
 
 | ID | Situation | Expected | Code | |
 |---|---|---|---|---|

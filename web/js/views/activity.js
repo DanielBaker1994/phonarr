@@ -6,6 +6,7 @@ import { text } from "../config.js";
 import * as S from "../store.js";
 import { state } from "../store.js";
 import { openTitle } from "../router.js";
+import { isDownloading } from "../models.js";
 import { Empty, Page, Poster, ServiceBanner, Spinner, StatusLine } from "./components.js";
 import { CalendarView } from "./calendar.js";
 
@@ -39,7 +40,8 @@ export function ActivityView() {
 function Downloads() {
   const live = (item) => S.statusOf(item.type, item.id, item.status);
   const failed = state.activity.filter((a) => live(a).state === "failed");
-  const active = state.activity.filter((a) => !["failed", "complete"].includes(live(a).state));
+  const active = state.activity.filter((a) => isDownloading(live(a).state));
+  const waiting = state.activity.filter((a) => !["failed", "complete"].includes(live(a).state) && !isDownloading(live(a).state));
   const done = state.activity.filter((a) => live(a).state === "complete");
   const section = (title, items) => items.length > 0 && html`<div class="group">
     <div class="group-header">${title}</div>
@@ -51,6 +53,7 @@ function Downloads() {
     ${section("Needs attention", failed)}
     ${section("In progress", active)}
     ${section("Recently added", done)}
+    ${section("Waiting", waiting)}
     ${state.activityLoaded && !state.activity.length && html`<${Empty} icon="activity" title="No activity">Requests and downloads show up here.<//>`}`;
 }
 

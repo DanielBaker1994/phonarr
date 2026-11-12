@@ -3,7 +3,7 @@ import { html, useEffect, useRef, useState } from "../../vendor/preact-htm.js";
 import { cfg } from "../config.js";
 import { Icon } from "../icons.js";
 import { activeCount, applyFilters, buildShelves, viaNeighbour } from "../filters.js";
-import { cardKey, noun, tabTitle, planSummary, isActive } from "../models.js";
+import { cardKey, noun, tabTitle, planSummary, isDownloading } from "../models.js";
 import * as S from "../store.js";
 import { state } from "../store.js";
 import { ConnectServerCard, Empty, Notice, Page, PosterCell, PosterRow, ServiceBanner, Spinner } from "./components.js";
@@ -21,8 +21,7 @@ export function DiscoverView() {
   // From Activity (the catalogue hides requested titles after a reload), plus anything just added here.
   const seen = new Set();
   const inProgress = [...state.activity.map((a) => ({ ...a, genres: [] })), ...movies, ...series].filter((c) => {
-    const s = S.statusFor(c).state;
-    return (isActive(s) || s === "searching" || s === "failed") && !seen.has(cardKey(c)) && seen.add(cardKey(c));
+    return isDownloading(S.statusFor(c).state) && !seen.has(cardKey(c)) && seen.add(cardKey(c));
   });
 
   const empty = (S.hasSection("movie") || S.hasSection("series")) && !movies.length && !series.length && !state.loading.size;
@@ -35,7 +34,6 @@ export function DiscoverView() {
       ${inProgress.length > 0 && html`<${PosterRow} title="In progress" items=${inProgress} />`}
       ${trending && html`<${PosterRow} title=${trending.title} items=${trending.items} />`}
       ${recommended.length > 0 && html`<${PosterRow} title="Recommended by Radarr" items=${recommended} />`}
-      ${S.hasSection("movie") && html`<${PosterRow} title="Films to add" items=${movies} seeAll="#/movies" />`}
       ${S.hasSection("series") && html`<${PosterRow} title="TV to add" items=${series} seeAll="#/tv" />`}
       ${shelves.map((s) => html`<${PosterRow} key=${s.id} title=${s.title} items=${s.items} />`)}
       ${["movie", "series"].filter((t) => !S.hasSection(t)).map((t) => html`<div class="pad"><${ConnectServerCard} type=${t} /></div>`)}

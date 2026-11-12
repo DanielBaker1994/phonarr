@@ -44,7 +44,7 @@ Paths starting with `backend/` are the gateway. On the web, "tap" also means cli
 
 ## 2. Launch and pairing
 
-On the web, pairing is **sign-in with the token only**: the page is served by the gateway, so its address is already known (`SignInView` in `views/settings.js`). L2 does not apply.
+On the web, pairing is **sign-in with the token only**: the page is served by the gateway, so its address is already known (`SignInView` in `views/settings.js`). L2 does not apply. The form is a real login form (fixed hidden username `phonarr`, the token as `current-password`), so the browser's password manager offers to save the token and fills it in later, which also helps where browser storage gets cleared or a home-screen web app keeps its own.
 
 | ID | Situation | Expected | Code | |
 |---|---|---|---|---|
@@ -70,8 +70,8 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 
 | ID | Situation | Expected | Code | |
 |---|---|---|---|---|
-| D1 | Normal | Rows: In progress, **New & trending** (titles from this year and last, by TMDB popularity for films and total votes for TV; hidden when under 3), Recommended by Radarr, Films to add, TV to add, then generated shelves (Highest rated, decades, genres, Under 90 min) | `Views/BrowseViews.swift` `DiscoverView` | ✅ |
-| D2 | In progress row after a reload | Comes from Activity, so requested titles stay visible even though the catalogue now hides them | `DiscoverView.inProgress` | 🔧 was built from the catalogue only and emptied after a refresh |
+| D1 | Normal | Rows: In progress, **New & trending** (titles from this year and last, by TMDB popularity for films and total votes for TV; hidden when under 3), Recommended by Radarr, TV to add (no "Films to add": it repeated Recommended by Radarr), then generated shelves (Highest rated, decades, genres, Under 90 min) | `Views/BrowseViews.swift` `DiscoverView` | ✅ |
+| D2 | In progress row after a reload | Comes from Activity, so requested titles stay visible even though the catalogue now hides them. Only titles actually downloading or importing; queued, paused, stalled, failed and waiting for a release are left out | `DiscoverView.inProgress` | 🔧 was built from the catalogue only and emptied after a refresh |
 | D3 | Tap poster | Details (§6) | `PosterCell` | ✅ |
 | D4 | Tap + | Adds with defaults; spinner badge → Searching → progress; toast "Added to library" | `PosterCell.quickAction`, `AppModel.add` | ✅ 📱 check the + doesn't also open details |
 | D4a | + and the connection drops before the gateway answers | The title goes back to how it was (not Failed), toast "Couldn't reach the gateway. It may not have been added; tap + to try again." The next + re-sends the same request (same idempotency key), and the next status poll shows it if the gateway did get it | `AppModel.add`, `web/js/store.js::add` | 🔧 used to show Failed for good and send the next tap to Retry (KB-01) |
@@ -137,7 +137,7 @@ On the web, pairing is **sign-in with the token only**: the page is served by th
 
 | ID | Situation | Expected | Code | |
 |---|---|---|---|---|
-| A1 | Something downloading | Sections Needs attention / In progress / Recently added; bars move every 5 s while open | `Views/ActivityView.swift`, gateway `POLL_WATCHING` | ✅ |
+| A1 | Something downloading | Sections Needs attention / In progress (downloading or importing only) / Recently added / Waiting (queued, paused, stalled, waiting for a release); bars move every 5 s while open | `Views/ActivityView.swift`, gateway `POLL_WATCHING` | ✅ |
 | A2 | Failed row | Message + Retry right in the row | `ActivityRow` | ✅ 📱 check Retry doesn't also open details |
 | A3 | Empty | "No activity" | `ActivityView` | ✅ |
 | A4 | Arr down | Banner, statuses marked "(last known)" | `ServiceBanner`, `StatusLine` | ✅ |

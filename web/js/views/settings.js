@@ -29,16 +29,20 @@ export function SignInView() {
     setBusy(false);
   };
   const msg = error || state.pairingMessage;
+  // A real login form (method, names, a username field) so the browser's password manager offers to save the
+  // token and fills it in next time. The username is fixed: the token is the only secret.
   return html`<section class="page narrow">
     <div class="hero">
       <span class="accent"><${Icon} name="popcorn" size=${44} stroke=${1.6} /></span>
       <h1>Phonarr</h1>
       <p class="muted">Discover films and TV and add them to Radarr and Sonarr in one tap.</p>
     </div>
-    <form onSubmit=${submit}>
-      <${Group} header="Gateway" footer=${html`The <code>ARR_GATEWAY_TOKEN</code> set for the Phonarr container. It's kept in this browser only. This page comes from the gateway itself (<code>${location.host}</code>), so there's no address to enter.`}>
-        <label class="frow"><input class="grow" type="password" placeholder="Access token" value=${token} autocomplete="current-password"
-          onInput=${(e) => setToken(e.target.value)} autofocus /></label>
+    <form id="signin" method="post" action="#" onSubmit=${submit}>
+      <input class="visually-hidden" type="text" name="username" id="signin-username" autocomplete="username"
+        value="phonarr" readonly tabindex="-1" aria-hidden="true" />
+      <${Group} header="Gateway" footer=${html`The <code>ARR_GATEWAY_TOKEN</code> set for the Phonarr container. It's kept in this browser, and your browser's password manager can save it (as user “phonarr”). This page comes from the gateway itself (<code>${location.host}</code>), so there's no address to enter.`}>
+        <label class="frow"><input class="grow" type="password" name="password" id="signin-token" placeholder="Access token"
+          value=${token} autocomplete="current-password" onInput=${(e) => setToken(e.target.value)} autofocus /></label>
       <//>
       ${msg && html`<${Notice} tone="bad">${msg}<//>`}
       <${Group}><button class="frow accent strong" type="submit" disabled=${!token.trim() || busy}>

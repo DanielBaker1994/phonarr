@@ -38,11 +38,16 @@ struct ActivityView: View {
         List {
             ServiceBanner().listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             let failed = model.activity.filter { live($0).state == .failed }
-            let active = model.activity.filter { live($0).state != .failed && live($0).state != .complete }
+            let active = model.activity.filter { live($0).state.isDownloading }
             let done = model.activity.filter { live($0).state == .complete }
+            let waiting = model.activity.filter {
+                let s = live($0).state
+                return s != .failed && s != .complete && !s.isDownloading
+            }
             if !failed.isEmpty { Section("Needs attention") { rows(failed) } }
             if !active.isEmpty { Section("In progress") { rows(active) } }
             if !done.isEmpty { Section("Recently added") { rows(done) } }
+            if !waiting.isEmpty { Section("Waiting") { rows(waiting) } }
         }
         .overlay {
             if loaded && model.activity.isEmpty {

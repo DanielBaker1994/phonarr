@@ -49,6 +49,8 @@ enum MediaState: String, Codable {
     }
 
     var isActive: Bool { [.submitting, .queued, .downloading, .importing, .paused, .stalled].contains(self) }
+    /// Actually moving: what "In progress" shows. Queued, paused, stalled and waiting for a release are not.
+    var isDownloading: Bool { self == .downloading || self == .importing }
 }
 
 struct MediaStatus: Codable, Hashable {

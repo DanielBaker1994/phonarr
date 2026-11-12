@@ -18,9 +18,6 @@ struct DiscoverView: View {
                     if !recommended.isEmpty {
                         PosterRow(title: "Recommended by Radarr", items: recommended)
                     }
-                    if model.hasSection(.movie) {
-                        PosterRow(title: "Films to add", items: model.catalog[.movie] ?? [], seeAll: .movie)
-                    }
                     if model.hasSection(.series) {
                         PosterRow(title: "TV to add", items: model.catalog[.series] ?? [], seeAll: .series)
                     }
@@ -67,8 +64,7 @@ struct DiscoverView: View {
         }
         var seen = Set<String>()
         return (fromActivity + (model.catalog[.movie] ?? []) + (model.catalog[.series] ?? [])).filter { card in
-            let s = model.status(for: card).state
-            return (s.isActive || s == .searching || s == .failed) && seen.insert(card.key).inserted
+            model.status(for: card).state.isDownloading && seen.insert(card.key).inserted
         }
     }
 }

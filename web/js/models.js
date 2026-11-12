@@ -38,6 +38,9 @@ export const STATE_ICON = {
 
 const ACTIVE = new Set(["submitting", "queued", "downloading", "importing", "paused", "stalled"]);
 export const isActive = (state) => ACTIVE.has(state);
+/** Actually moving: what "In progress" shows. Queued, paused, stalled and waiting for a release are not. */
+const DOWNLOADING = new Set(["downloading", "importing"]);
+export const isDownloading = (state) => DOWNLOADING.has(state);
 export const stateLabel = (s) => STATE_LABEL[s] || STATE_LABEL.unknown;
 export const IDLE = { state: "not_requested" };
 export const SUBMITTING = { state: "submitting" };

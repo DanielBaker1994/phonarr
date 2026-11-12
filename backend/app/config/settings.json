@@ -182,7 +182,8 @@
     "logging.level": "LOG_LEVEL",
     "gateway.batch_max": "BATCH_MAX",
     "arr.timeout": "ARR_TIMEOUT",
-    "gateway.poll.idle_health_check": "IDLE_HEALTH_CHECK"
+    "gateway.poll.idle_health_check": "IDLE_HEALTH_CHECK",
+    "auth.required": "AUTH_REQUIRED"
   },
   "tvmaze": {
     "enabled": true,
@@ -201,5 +202,9 @@
     "lookup_gap": 0.25,
     "first_run_delay": 20,
     "check_every": 3600
+  },
+  "auth": {
+    "required": false,
+    "_note": "Off: no access token needed (private network only). AUTH_REQUIRED=true turns it back on."
   }
 }

@@ -106,6 +106,7 @@ The image version (`APP_VERSION`, shown in `/v1/health` and System status) comes
 | `DATA_DIR` | `/app/data` | Moves the whole data folder (database, `titles.json`). Normally leave it and change the bind mount instead. |
 | `OUTPUT_DIR` | `/app/cache` | Moves the rebuildable output folder (logs). |
 | `TITLES_FILE` | `$DATA_DIR/titles.json` | The optional titles list. |
+| `AUTH_REQUIRED` | `false` (settings.json `auth.required`) | Off: no access token needed, and the web app opens straight in. For a private network only. `true` asks for `ARR_GATEWAY_TOKEN` again. |
 | `ARR_SPEC_URL_RADARR` / `ARR_SPEC_URL_SONARR` | upstream GitHub | OpenAPI spec used by the API check (§5.4). |
 | `CONFIG_DIR` | none | Folder with `settings.json` and/or `messages.json` that override the built-in ones key by key (see Configuration below). |
 | `RADARR_URL` / `RADARR_API_KEY`, `SONARR_URL` / `SONARR_API_KEY` | unset | Optional preconfiguration on first start. Otherwise use the setup screens. |

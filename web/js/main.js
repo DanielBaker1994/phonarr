@@ -8,7 +8,7 @@ import { downloadDebugReport } from "./debug.js";
 import * as S from "./store.js";
 import { state } from "./store.js";
 import { parse } from "./router.js";
-import { PosterMenu, Toast } from "./views/components.js";
+import { PosterMenu, Spinner, Toast } from "./views/components.js";
 import { DiscoverView, MediaGridView } from "./views/browse.js";
 import { CustomizeSheet, TitleDetailView } from "./views/detail.js";
 import { SimilarListView } from "./views/similar.js";
@@ -87,7 +87,8 @@ function App() {
   useEffect(() => S.subscribe(rerender), []);
   const route = parse();
   let body;
-  if (!state.paired) body = html`<${SignInView} />`;
+  if (!state.paired && state.authChecking) body = html`<div class="center pad"><${Spinner} /></div>`;
+  else if (!state.paired) body = html`<${SignInView} />`;
   else if (!state.onboardingComplete) body = html`<${SetupFlowView} />`;
   else body = html`<${ScreenBoundary} routeKey=${location.hash}><${Screen} route=${route} /><//><${TabBar} current=${route.tab} />`;
   return html`<div class="app">${body}<${CustomizeSheet} /><${PosterMenu} /><${Toast} /></div>`;

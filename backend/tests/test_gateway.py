@@ -1402,3 +1402,13 @@ def test_radarr_discover_survives_its_metadata_server_failing(tmp_path):
     fake.discover_fail = "all"
     with TestClient(create_app(tmp_path, fake.transport(), False, TOKEN)) as c:      # restarted: nothing in memory
         assert {1010, 1011, 1012, 1013} <= set(ids(c.get("/v1/discover?type=movie", headers=AUTH)))
+
+
+def test_auth_can_be_turned_off(client, monkeypatch):
+    """auth.required = false (the shipped default): every route works without a token, and health says so."""
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
+    assert client.get("/v1/config").status_code == 200
+    assert client.get("/v1/health").json()["auth_required"] is False
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    assert client.get("/v1/config").status_code == 401
+    assert client.get("/v1/health").json()["auth_required"] is True

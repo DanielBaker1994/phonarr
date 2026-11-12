@@ -199,6 +199,8 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
     app.add_middleware(GZipMiddleware, minimum_size=cfg("http.gzip_min_bytes"))
 
     def auth(authorization: str = Header(default="")) -> None:
+        if not cfg("auth.required"):   # private network: the token is optional (settings.json auth.required)
+            return
         scheme, _, value = authorization.partition(" ")
         if scheme.lower() != "bearer" or not hmac.compare_digest(value.strip(), access_token):
             raise HTTPException(401, detail={"kind": "auth", "message": msg("errors.auth")})
@@ -293,6 +295,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
         snap_at = gateway.snapshot_at
         return {"ok": True, "status": status, "version": APP_VERSION,
                 "uptime_s": round(now - started_at), "web_frontend": web_served,
+                "auth_required": cfg("auth.required"),
                 "services": services, "poller": poller,
                 "last_poll_error_s_ago": round(now - gateway.last_poll_error_at) if gateway.last_poll_error_at else None,
                 "last_status_refresh_s_ago": round(now - snap_at, 1) if snap_at else None,

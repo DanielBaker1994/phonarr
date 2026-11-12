@@ -23,6 +23,7 @@ export const pref = {
 export const state = {
   // Pairing
   paired: api.paired,
+  authChecking: !api.paired,   // asking /v1/health whether a token is needed at all
   pairingMessage: null,
   onboardingComplete: pref.get("onboardingComplete", false),
   gatewayReachable: true,
@@ -422,8 +423,19 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ------------------------------------------------------------------ session start + cache
+/** Stands in for a token when the gateway doesn't ask for one (settings.json auth.required = false). */
+const OPEN_TOKEN = "no-token-needed";
+
 export async function startSession() {
-  if (!state.paired) return;
+  if (!state.paired) {
+    // The gateway may not need a token at all: then sign in by itself and never show the sign-in screen.
+    try {
+      if ((await api.health()).auth_required === false) { state.authChecking = false; return pair(OPEN_TOKEN, false); }
+    } catch { /* unreachable: the sign-in screen explains when they try */ }
+    state.authChecking = false;
+    emit();
+    return;
+  }
   await refreshConfig();
   await Promise.all([refreshOptions(), reloadDiscovery()]);
   refreshNow();

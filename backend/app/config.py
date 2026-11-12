@@ -53,7 +53,9 @@ def cfg(key: str) -> Any:
     env_name = settings.get("env", {}).get(key)
     raw = os.environ.get(env_name) if env_name else None
     if raw not in (None, ""):
-        return type(value)(raw) if isinstance(value, (int, float)) and not isinstance(value, bool) else raw
+        if isinstance(value, bool):
+            return raw.strip().lower() in ("1", "true", "yes", "on")
+        return type(value)(raw) if isinstance(value, (int, float)) else raw
     return value
 
 

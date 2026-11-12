@@ -79,9 +79,9 @@ It checks the Docker network in `ARR_NETWORK` exists, builds the image from your
 
 The repository isn't on GitHub yet. When it is:
 
-1. Create the repo `DanielBaker1994/phonarr` on github.com and push this folder to its `main` branch.
+1. Create the repo `DanielBaker1994/phonarr` on github.com and push this folder to its `master` branch.
 2. That's all for the build: [`.github/workflows/docker-image.yml`](../.github/workflows/docker-image.yml) runs `./test.sh`, then builds `backend/Dockerfile` for `linux/amd64` and `linux/arm64` and pushes
-   - `ghcr.io/danielbaker1994/phonarr:latest` and `:sha-<commit>` on every push to `main`,
+   - `ghcr.io/danielbaker1994/phonarr:latest` and `:sha-<commit>` on every push to `master`,
    - `:1.2.0` when you push a tag `v1.2.0`.
    It logs in with the workflow's own `GITHUB_TOKEN`; no secrets to add. Pull requests are built and tested but not pushed.
 3. The first push creates the package **private**. Either make it public (github.com → your profile → Packages → phonarr → Package settings → Change visibility), or log the server in once with a personal access token that has `read:packages`:

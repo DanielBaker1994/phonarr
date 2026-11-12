@@ -1,6 +1,6 @@
 # Builds the Phonarr image (gateway API + web app) and pushes it to GitHub Container Registry:
-#   ghcr.io/<owner>/phonarr:latest        every push to main
-#   ghcr.io/<owner>/phonarr:sha-<commit>  every push to main
+#   ghcr.io/<owner>/phonarr:latest        every push to master
+#   ghcr.io/<owner>/phonarr:sha-<commit>  every push to master
 #   ghcr.io/<owner>/phonarr:1.2.0         when you push a tag v1.2.0
 # Pull requests build (and run the tests) but don't push.
 # Nothing to configure: it logs in with the workflow's own GITHUB_TOKEN.
@@ -8,7 +8,7 @@ name: docker-image
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

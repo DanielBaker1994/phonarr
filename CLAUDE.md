@@ -14,7 +14,7 @@ Read first:
 ```
 build-web.sh  build-ios.sh  dev.sh  test.sh    The only entry points. Short, linear, no flags or case statements.
 scripts/                    Helpers the entry points call (lib.sh, python-env.sh, wait-for-health.sh). Never run directly.
-.github/workflows/docker-image.yml   Tests, then builds the image and pushes ghcr.io/<owner>/phonarr (main, tags v*)
+.github/workflows/docker-image.yml   Tests, then builds the image and pushes ghcr.io/<owner>/phonarr (master, tags v*)
 .dockerignore               Build context is the repo root; only backend/app, backend/requirements.txt and web/ go in
 
 backend/                    THE BACKEND (runs in Docker next to Radarr/Sonarr)

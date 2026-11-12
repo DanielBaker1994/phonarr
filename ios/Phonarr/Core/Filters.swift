@@ -97,8 +97,8 @@ enum GenreNeighbours {
 }
 
 struct FilterState: Equatable, Codable {
-    /// Highest rated first by default, English only on, neighbouring genres included once a genre is picked.
-    var sort: SortOption = .rating
+    /// Newest first by default (highest rated within a year), English only on, neighbouring genres included once a genre is picked.
+    var sort: SortOption = .yearDesc
     var englishOnly = true
     var genres: Set<String> = []
     var excludeGenres: Set<String> = []
@@ -127,7 +127,7 @@ struct FilterState: Equatable, Codable {
                collection != nil, certification != nil, source != nil, seriesStatus != nil].filter { $0 }.count
     }
 
-    var isDefault: Bool { activeCount == 0 && englishOnly && sort == .rating }
+    var isDefault: Bool { activeCount == 0 && englishOnly && sort == .yearDesc }
 
     static func isEnglish(_ c: MediaCard) -> Bool {
         guard let lang = c.language?.lowercased(), !lang.isEmpty else { return true }   // missing data never hides a title
@@ -198,13 +198,24 @@ struct FilterState: Equatable, Codable {
         switch sort {
         case .trending: return by({ Trending.score($0) }, descending: true)
         case .title: return cards.sorted(by: byTitle)
-        case .yearDesc: return by({ $0.year }, descending: true)
+        case .yearDesc: return Self.newestFirst(cards)
         case .yearAsc: return by({ $0.year }, descending: false)
         case .rating: return by({ $0.rating }, descending: true)
         case .popularity: return by({ $0.popularity }, descending: true)
         case .runtimeAsc: return by({ $0.runtime }, descending: false)
         case .runtimeDesc: return by({ $0.runtime }, descending: true)
         case .recent: return by({ $0.added }, descending: true)
+        }
+    }
+
+    /// Newest year first; within a year highest rated first, unrated last. Same as discovery.py and filters.js.
+    static func newestFirst(_ cards: [MediaCard]) -> [MediaCard] {
+        cards.sorted { a, b in
+            if (a.year == nil) != (b.year == nil) { return a.year != nil }
+            if let x = a.year, let y = b.year, x != y { return x > y }
+            if (a.rating == nil) != (b.rating == nil) { return a.rating != nil }
+            if let x = a.rating, let y = b.rating, x != y { return x > y }
+            return (a.title ?? "").localizedCaseInsensitiveCompare(b.title ?? "") == .orderedAscending
         }
     }
 
@@ -278,6 +289,8 @@ enum ShelfBuilder {
         let trending = cards.filter { Trending.score($0) != nil }
             .sorted { (Trending.score($0) ?? 0) > (Trending.score($1) ?? 0) }
         add("trending", "New & trending", trending)
+        let thisYear = Calendar.current.component(.year, from: Date())
+        add("newest", "Newest", FilterState.newestFirst(cards.filter { ($0.year ?? Int.max) <= thisYear }))
         let rated = cards.filter { $0.rating != nil }.sorted { ($0.rating ?? 0) > ($1.rating ?? 0) }
         add("rated", "Highest rated", rated)
         add("early", "Before 1930", cards.filter { ($0.year ?? 9999) < 1930 }.sorted { ($0.year ?? 0) < ($1.year ?? 0) })

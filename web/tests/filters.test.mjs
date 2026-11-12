@@ -16,9 +16,17 @@ const ids = (list) => list.map((c) => c.id);
 // The old tests below check the shared rules with English only off and title order, as before.
 const plain = (patch = {}) => ({ ...emptyFilters("title"), english_only: false, ...patch });
 
-test("defaults: highest rated first, English only (titles with no language kept)", () => {
+test("defaults: newest first, English only (titles with no language kept)", () => {
   assert.deepEqual(ids(applyFilters(cards, emptyFilters())), [3, 4, 2]);
-  assert.deepEqual(ids(applyFilters(cards, { ...emptyFilters(), english_only: false })), [1, 3, 4, 2]);
+  assert.deepEqual(ids(applyFilters(cards, { ...emptyFilters(), english_only: false })), [3, 4, 2, 1]);
+});
+
+test("newest first breaks ties by rating, unrated last, as discovery.py", () => {
+  const pool = [
+    { id: 1, title: "A", year: 2024, rating: 6.0 }, { id: 2, title: "B", year: 2024, rating: 8.1 },
+    { id: 3, title: "C", year: 2024, rating: null }, { id: 4, title: "D", year: 2025, rating: 5.0 }, { id: 5, title: "E" },
+  ];
+  assert.deepEqual(ids(sortCards(pool, "year_desc")), [4, 2, 1, 3, 5]);
 });
 
 test("no filters sorts by title", () => {
@@ -79,8 +87,9 @@ test("activeCount counts each filter once and every genre", () => {
 
 test("shelves need at least three titles", () => {
   const shelves = buildShelves(cards);
-  assert.deepEqual(shelves.map((s) => s.id), ["rated"]);
-  assert.deepEqual(ids(shelves[0].items), [1, 3, 4]);
+  assert.deepEqual(shelves.map((s) => s.id), ["newest", "rated"]);
+  assert.deepEqual(ids(shelves[0].items), [3, 4, 2, 1]);
+  assert.deepEqual(ids(shelves[1].items), [1, 3, 4]);
 });
 
 test("New & trending: titles from this year and last, by popularity (films) or total votes (TV), as discovery.py", () => {

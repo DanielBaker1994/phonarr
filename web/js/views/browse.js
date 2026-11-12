@@ -15,8 +15,9 @@ export function DiscoverView() {
   const movies = state.catalog.movie, series = state.catalog.series;
   const recommended = movies.filter((c) => c.source === "recommended" && S.statusFor(c).state === "not_requested");
   const allShelves = buildShelves([...movies, ...series]);
-  const trending = allShelves.find((s) => s.id === "trending");   // shown near the top, the rest further down
-  const shelves = allShelves.filter((s) => s !== trending);
+  const trending = allShelves.find((s) => s.id === "trending");   // these two near the top, the rest further down
+  const newest = allShelves.find((s) => s.id === "newest");
+  const shelves = allShelves.filter((s) => s !== trending && s !== newest);
 
   // From Activity (the catalogue hides requested titles after a reload), plus anything just added here.
   const seen = new Set();
@@ -33,6 +34,7 @@ export function DiscoverView() {
       <${ServiceBanner} />
       ${inProgress.length > 0 && html`<${PosterRow} title="In progress" items=${inProgress} />`}
       ${trending && html`<${PosterRow} title=${trending.title} items=${trending.items} />`}
+      ${newest && html`<${PosterRow} title=${newest.title} items=${newest.items} />`}
       ${recommended.length > 0 && html`<${PosterRow} title="Recommended by Radarr" items=${recommended} />`}
       ${S.hasSection("series") && html`<${PosterRow} title="TV to add" items=${series} seeAll="#/tv" />`}
       ${shelves.map((s) => html`<${PosterRow} key=${s.id} title=${s.title} items=${s.items} />`)}

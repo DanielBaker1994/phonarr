@@ -173,7 +173,7 @@
     "english_names": [
       "English"
     ],
-    "default_sort": "rating",
+    "default_sort": "year_desc",
     "trending_years": 2,
     "page_size_max": 500
   },

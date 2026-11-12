@@ -134,6 +134,21 @@ def test_request_plan_names_profile_and_folder(client, fake):
     assert plan["problem"]["kind"] == "config" and "default" in plan["problem"]["message"]
 
 
+def test_no_default_profile_uses_what_the_library_uses(client, fake):
+    """No saved default but a library to go by: + is still one tap, with the profile most titles use."""
+    configure(client)
+    client.put("/v1/defaults", json={"radarr_profile_id": None}, headers=AUTH)
+    fake.movies += [{"id": 900 + i, "tmdbId": 900 + i, "title": f"Owned {i}", "hasFile": True, "monitored": True,
+                     "qualityProfileId": 4, "rootFolderPath": "/movies"} for i in range(3)]
+    fake.movies.append({"id": 950, "tmdbId": 950, "title": "Owned odd", "hasFile": True, "monitored": True,
+                        "qualityProfileId": 1, "rootFolderPath": "/movies"})
+    client.app.state.gateway._library.clear()
+    plan = client.get("/v1/request-plan?type=movie", headers=AUTH).json()
+    assert plan["problem"] is None and plan["quality_profile"] == "Any"
+    r = client.post("/v1/requests", json={"type": "movie", "id": 10331}, headers=AUTH)
+    assert r.status_code < 300 and fake.posts[-1][1]["qualityProfileId"] == 4
+
+
 # -------------------------------------------------------------- batch requests
 def test_batch_request_adds_each_once_and_reports_per_item(client, fake):
     configure(client)
@@ -185,7 +200,7 @@ def test_one_tap_request_uses_defaults_and_hides_title(client, fake):
     assert body["addOptions"] == {"searchForMovie": True}
     assert 10331 not in ids(client.get("/v1/discover?type=movie", headers=AUTH))
     tracked = client.get("/v1/discover?type=movie&include_tracked=true", headers=AUTH).json()["items"]
-    assert tracked[0]["status"]["state"] == "searching"
+    assert next(i for i in tracked if i["id"] == 10331)["status"]["state"] == "searching"
 
 
 def test_override_does_not_change_default(client, fake):
@@ -533,8 +548,11 @@ def test_new_filters_english_decades_runtime_range_neighbours(rich):
 
 def test_discover_sorts_by_trusted_rating_and_pages_without_cap(rich):
     d = lambda qs: rich.get("/v1/discover?type=movie&" + qs, headers=AUTH).json()  # noqa: E731
+    rated = [i["id"] for i in d("sort=rating")["items"]]
+    assert set(rated[:2]) == {10331, 653} and rated[-1] == 961       # highest rated first, unrated last
     order = [i["id"] for i in d("")["items"]]
-    assert set(order[:2]) == {10331, 653} and order[-1] == 961       # highest rated first by default, unrated last
+    years = [i["year"] for i in d("")["items"]]
+    assert years == sorted(years, reverse=True)                      # newest first by default
     assert "page" not in d("") and d("")["matched"] == 7
     pages = [[i["id"] for i in d(f"page_size=3&page={n}")["items"]] for n in (1, 2, 3)]
     assert [len(p) for p in pages] == [3, 3, 1] and sum(pages, []) == order

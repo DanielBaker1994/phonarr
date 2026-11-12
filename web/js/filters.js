@@ -38,9 +38,9 @@ export const VALUE_FILTERS = [
 ];
 
 export const YEAR_MODES = [["any", "Any"], ["decades", "Decades"], ["range", "Range"]];
-export const DEFAULT_SORT = "rating";
+export const DEFAULT_SORT = "year_desc";
 
-/** Defaults: highest rated first, English only on, neighbouring genres included once a genre is picked. */
+/** Defaults: newest first (highest rated within a year), English only on, neighbouring genres included once a genre is picked. */
 export function emptyFilters(sort = DEFAULT_SORT) {
   return { sort, english_only: true, genres: [], exclude_genres: [], neighbours: true, neighbours_off: [],
            year_mode: "any", decades: [], year_min: null, year_max: null, runtime_min: 0, runtime_max: 0,
@@ -172,7 +172,7 @@ export function trendingScore(card, thisYear = new Date().getFullYear()) {
 export function sortCards(cards, sort, thisYear = new Date().getFullYear()) {
   switch (sort) {
     case "trending": return by(cards, (c) => trendingScore(c, thisYear), true);
-    case "year_desc": return by(cards, (c) => c.year, true);
+    case "year_desc": return newestFirst(cards);
     case "year_asc": return by(cards, (c) => c.year, false);
     case "rating": return by(cards, (c) => c.rating, true);
     case "popularity": return by(cards, (c) => c.popularity, true);
@@ -183,6 +183,18 @@ export function sortCards(cards, sort, thisYear = new Date().getFullYear()) {
   }
 }
 
+/** Newest year first; within a year highest rated first, unrated last. Same as discovery.py. */
+function newestFirst(cards) {
+  const has = (v) => v !== null && v !== undefined;
+  return [...cards].sort((a, b) => {
+    if (has(a.year) !== has(b.year)) return has(a.year) ? -1 : 1;
+    if (has(a.year) && a.year !== b.year) return b.year - a.year;
+    if (has(a.rating) !== has(b.rating)) return has(a.rating) ? -1 : 1;
+    if (has(a.rating) && a.rating !== b.rating) return b.rating - a.rating;
+    return byTitle(a, b);
+  });
+}
+
 /** Discover shelves generated from metadata, so the home screen isn't just "latest" and "popular". */
 export function buildShelves(cards, minimum = 3, thisYear = new Date().getFullYear()) {
   const shelves = [];
@@ -190,6 +202,7 @@ export function buildShelves(cards, minimum = 3, thisYear = new Date().getFullYe
     if (items.length >= minimum) shelves.push({ id, title, items: items.slice(0, 20) });
   };
   add("trending", "New & trending", sortCards(cards.filter((c) => trendingScore(c, thisYear) != null), "trending", thisYear));
+  add("newest", "Newest", newestFirst(cards.filter((c) => c.year != null && c.year <= thisYear)));
   add("rated", "Highest rated", cards.filter((c) => c.rating != null).sort((a, b) => b.rating - a.rating));
   add("early", "Before 1930", cards.filter((c) => (c.year ?? 9999) < 1930).sort((a, b) => (a.year ?? 0) - (b.year ?? 0)));
   add("short", "Under 90 minutes", cards.filter((c) => c.runtime > 0 && c.runtime < 90));

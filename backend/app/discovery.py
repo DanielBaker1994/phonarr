@@ -158,8 +158,9 @@ def sort_cards(cards: list[dict], sort: str | None, this_year: int | None = None
     if sort == "trending":   # new and trending first, everything else after by title
         scored = [(trending_score(c, this_year), c) for c in cards]
         return [c for _, c in sorted(scored, key=lambda sc: (sc[0] is None, -(sc[0] or 0), title(sc[1])))]
-    if sort == "year_desc":
-        return sorted(cards, key=lambda c: (-(c.get("year") or 0), title(c)))
+    if sort == "year_desc":   # newest year first, highest rated first within a year, unrated last
+        return sorted(cards, key=lambda c: (-(c.get("year") or 0), c.get("rating") is None, -(c.get("rating") or 0),
+                                            title(c)))
     if sort == "year_asc":
         return sorted(cards, key=lambda c: (c.get("year") or 9999, title(c)))
     if sort == "rating":   # unrated titles last

@@ -230,12 +230,12 @@ struct ActiveFilterBar: View {
     let total: Int
 
     var body: some View {
-        if filters.activeCount > 0 || filters.sort != .rating || filters.englishOnly {
+        if filters.activeCount > 0 || filters.sort != .yearDesc || filters.englishOnly {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     Text("\(shown) of \(total)").font(.caption).foregroundStyle(.secondary)
-                    if filters.sort != .rating {
-                        chip(filters.sort.label, systemImage: "arrow.up.arrow.down") { filters.sort = .rating }
+                    if filters.sort != .yearDesc {
+                        chip(filters.sort.label, systemImage: "arrow.up.arrow.down") { filters.sort = .yearDesc }
                     }
                     if filters.englishOnly { chip("English only") { filters.englishOnly = false } }
                     ForEach(filters.genres.sorted(), id: \.self) { g in chip(g) { filters.genres.remove(g) } }

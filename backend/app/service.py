@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import hashlib
 import json
 import time
@@ -408,6 +409,8 @@ class Gateway:
             profile = next(iter(profiles))
         elif not profiles:
             raise ArrError(service, "config", msg("arr.no_profiles", name=name))
+        elif (used := await self._most_used(service, "qualityProfileId", profiles)) is not None:
+            profile = used   # no saved default: what most of the library already uses, so + is one tap
         else:
             raise ArrError(service, "config", msg("arr.choose_profile", name=name))
         accessible = {r["path"]: r.get("accessible", True) for r in opts["root_folders"]}
@@ -422,6 +425,8 @@ class Gateway:
             root = roots[0]
         elif not roots:
             raise ArrError(service, "config", msg("arr.no_roots", name=name))
+        elif (used := await self._most_used(service, "rootFolderPath", set(roots), normalize=True)) is not None:
+            root = used
         else:
             raise ArrError(service, "config", msg("arr.choose_root", name=name))
         if accessible.get(root) is False:
@@ -429,6 +434,17 @@ class Gateway:
         return profile, root
 
     # ----------------------------------------------------------------- library
+    async def _most_used(self, service: str, field: str, allowed: set, normalize: bool = False) -> Any:
+        """The value of `field` most of the library uses, among `allowed`; None if the library is empty or unreachable."""
+        try:
+            items = await self.library(service)
+        except ArrError:
+            return None
+        clean = (lambda v: v.rstrip("/") if isinstance(v, str) else v) if normalize else (lambda v: v)
+        by_clean = {clean(a): a for a in allowed}
+        counts = Counter(by_clean[clean(i.get(field))] for i in items if clean(i.get(field)) in by_clean)
+        return counts.most_common(1)[0][0] if counts else None
+
     async def library(self, service: str, force: bool = False) -> list[dict]:
         cached = self._library.get(service)
         if cached and not force and time.monotonic() - cached[0] < LIBRARY_TTL:

@@ -15,6 +15,9 @@ struct DiscoverView: View {
                     if let trending = allShelves.first(where: { $0.id == "trending" }) {
                         PosterRow(title: trending.title, items: trending.items)
                     }
+                    if let newest = allShelves.first(where: { $0.id == "newest" }) {
+                        PosterRow(title: newest.title, items: newest.items)
+                    }
                     if !recommended.isEmpty {
                         PosterRow(title: "Recommended by Radarr", items: recommended)
                     }
@@ -49,7 +52,7 @@ struct DiscoverView: View {
         ShelfBuilder.build((model.catalog[.movie] ?? []) + (model.catalog[.series] ?? []))
     }
 
-    private var shelves: [Shelf] { allShelves.filter { $0.id != "trending" } }
+    private var shelves: [Shelf] { allShelves.filter { $0.id != "trending" && $0.id != "newest" } }
 
     private var recommended: [MediaCard] {
         (model.catalog[.movie] ?? []).filter { $0.source == DiscoverySource.recommended.rawValue

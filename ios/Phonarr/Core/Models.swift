@@ -100,7 +100,7 @@ struct MediaCard: Codable, Identifiable, Hashable {
     var certification: String? = nil
     var keywords: [String]? = nil
     var seriesStatus: String? = nil
-    /// Where discovery found it: library, list (your titles list), import_list, recommended, search
+    /// Where discovery found it: library, list (your titles list), import_list, recommended, tvmaze, search
     var source: String? = nil
     var added: String? = nil
     // Only on "More like this" results
@@ -139,13 +139,14 @@ struct RequestPlan: Codable, Hashable {
 }
 
 enum DiscoverySource: String, CaseIterable {
-    case library, list, importList = "import_list", recommended, search
+    case library, list, importList = "import_list", recommended, tvmaze, search
     var label: String {
         switch self {
         case .library: "In your library"
         case .list: "Your titles list"
         case .importList: "Radarr import lists"
         case .recommended: "Recommended by Radarr"
+        case .tvmaze: "Popular on TVmaze"
         case .search: "Search result"
         }
     }

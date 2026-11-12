@@ -1344,3 +1344,45 @@ def test_trending_sort_new_titles_by_popularity_or_votes():
     assert trending_score(cards[0], 2026) is None and trending_score(cards[3], 2026) == 80.0
     assert [c["id"] for c in sort_cards(cards, "trending", 2026)] == [3, 4, 2, 5, 1, 6]  # rest by title
     assert "trending" in SORTS
+
+
+# ---------------------------------------------------------------------- TVmaze (TV discovery)
+def test_tvmaze_select_keeps_popular_shows_with_a_tvdb_id():
+    from app.tvmaze import select
+    shows = [{"name": "A", "weight": 99, "externals": {"thetvdb": 1}, "premiered": "2024-01-01"},
+             {"name": "B", "weight": 100, "externals": {"thetvdb": None}},           # no TVDB id: Sonarr can't add it
+             {"name": "C", "weight": 20, "externals": {"thetvdb": 3}},             # below min_weight
+             {"name": "D", "weight": 99, "externals": {"thetvdb": 4}, "premiered": "2025-05-01"},
+             {"name": "A again", "weight": 70, "externals": {"thetvdb": 1}}]
+    assert [s["tvdb_id"] for s in select(shows, 10, 50)] == [4, 1]                # newer first on equal weight
+    assert [s["tvdb_id"] for s in select(shows, 1, 50)] == [4]
+
+
+def test_tvmaze_pool_fills_the_tv_tab_without_owned_shows(client, fake):
+    """Sonarr has no discovery feed; TVmaze's popular shows fill TV, looked up through Sonarr, owned ones hidden."""
+    import httpx
+    configure(client)
+    gw = client.app.state.gateway
+    pages = {0: [{"name": "Breaking Bad", "weight": 100, "externals": {"thetvdb": 81189}},
+                 {"name": "Haunted Anthology", "weight": 90, "externals": {"thetvdb": 70002}},
+                 {"name": "Unknown to Sonarr", "weight": 95, "externals": {"thetvdb": 99999}},
+                 {"name": "No TVDB", "weight": 100, "externals": {}}]}
+    seen = []
+
+    def tvmaze(request):
+        page = int(request.url.params["page"])
+        seen.append(page)
+        return httpx.Response(200, json=pages[page]) if page in pages else httpx.Response(404)
+
+    gw.tvmaze.transport = httpx.MockTransport(tvmaze)
+    fake.series.append({**fake.series_lookup[70002], "id": 77, "monitored": True, "qualityProfileId": 7})
+    gw._library.clear()
+    info = client.portal.call(gw.refresh_tvmaze)
+    assert seen == [0, 1] and info["shows"] == 3 and info["ready"] == 2           # 99999: Sonarr doesn't know it
+    tv = client.get("/v1/discover?type=series", headers=AUTH).json()["items"]
+    by_id = {c["id"]: c for c in tv}
+    assert by_id[81189]["source"] == "tvmaze" and by_id[81189]["title"] == "Breaking Bad"
+    assert 70002 not in by_id and 99999 not in by_id                              # owned, unknown
+    seen.clear()
+    client.portal.call(gw.refresh_tvmaze)
+    assert seen == []                                                              # not due again for a week

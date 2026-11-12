@@ -53,7 +53,7 @@ Richness: ●●● present for nearly every title · ●●○ usually present,
 
 | Field | Values | Used for |
 |---|---|---|
-| `source` | `library`, `list` (titles.json), `import_list`, `recommended` (Radarr Discover), `search` | "Found in" filter, "Recommended by Radarr" shelf |
+| `source` | `library`, `list` (titles.json), `import_list`, `recommended` (Radarr Discover), `tvmaze` (popular TV from TVmaze), `search` | "Found in" filter, "Recommended by Radarr" shelf |
 | `added` | Radarr/Sonarr `added` date, for library titles | "Recently added" sort |
 
 Radarr's Discover feed (`GET /api/v3/importlist/movie?includeRecommendations=true`) returns the same `MovieResource` shape as a lookup, plus `isRecommendation`, `isExcluded` and `isExisting`. The gateway caches it for 10 minutes and stores each entry as lookup metadata, so opening or requesting one doesn't need another lookup.

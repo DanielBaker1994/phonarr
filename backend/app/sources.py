@@ -7,7 +7,9 @@
    (GET /api/v3/importlist/movie?includeRecommendations=true).
 3. Your library: titles already in Radarr/Sonarr (shown when "show requested"
    is on, and used for status).
-4. Search: typing in the search field also runs a Radarr/Sonarr lookup, so any
+4. TVmaze (tvmaze.py): the most popular shows on TVmaze, for TV, since Sonarr has no
+   discovery feed. TVDB IDs only; details come from Sonarr.
+5. Search: typing in the search field also runs a Radarr/Sonarr lookup, so any
    title Radarr/Sonarr can find can be requested.
 """
 from __future__ import annotations

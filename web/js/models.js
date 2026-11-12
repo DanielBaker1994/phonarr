@@ -61,6 +61,7 @@ export const SOURCE_LABEL = {
   list: "Your titles list",
   import_list: "Radarr import lists",
   recommended: "Recommended by Radarr",
+  tvmaze: "Popular on TVmaze",
   search: "Search result",
 };
 export const sourceLabel = (s) => SOURCE_LABEL[s] || (s ? s[0].toUpperCase() + s.slice(1) : "");

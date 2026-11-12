@@ -184,9 +184,11 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
                      tz=time.strftime("%Z")))
         task = asyncio.create_task(gateway.run_poller()) if run_poller else None
         gateway.poller_task = task
+        tv_task = asyncio.create_task(gateway.run_tvmaze()) if run_poller else None   # TV discovery (tvmaze.py)
         yield
-        if task:
-            task.cancel()
+        for t in (task, tv_task):
+            if t:
+                t.cancel()
         await gateway.aclose()
 
     web_served = (web_dir / "index.html").is_file()
@@ -345,6 +347,7 @@ def create_app(data_dir: str | Path | None = None, transport: httpx.AsyncBaseTra
                         if gateway.snapshot_at is not None else None},
             "services": gateway.snapshot["services"],
             "titles_list": gateway.titles.counts(),
+            "tvmaze": gateway.tvmaze_info(),
         }
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("gateway/info.json", redact(json.dumps(info, indent=2, default=str)))

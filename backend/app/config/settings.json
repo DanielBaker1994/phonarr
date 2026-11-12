@@ -12,7 +12,8 @@
       "compat": "compat.log",
       "sources": "sources.log",
       "datafiles": "datafiles.log",
-      "calendar": "calendar.log"
+      "calendar": "calendar.log",
+      "tvmaze": "tvmaze.log"
     },
     "trace_level": "DEBUG",
     "quiet_loggers": [
@@ -182,5 +183,23 @@
     "gateway.batch_max": "BATCH_MAX",
     "arr.timeout": "ARR_TIMEOUT",
     "gateway.poll.idle_health_check": "IDLE_HEALTH_CHECK"
+  },
+  "tvmaze": {
+    "enabled": true,
+    "base_url": "https://api.tvmaze.com",
+    "user_agent": "Phonarr/1.0 (self-hosted)",
+    "count": 600,
+    "min_weight": 50,
+    "max_pages": 1000,
+    "request_gap": 0.6,
+    "timeout": 20,
+    "retries": 3,
+    "rate_limit_wait": 10,
+    "refresh_hours": 168,
+    "retry_after_failure": 3600,
+    "lookup_concurrency": 2,
+    "lookup_gap": 0.25,
+    "first_run_delay": 20,
+    "check_every": 3600
   }
 }

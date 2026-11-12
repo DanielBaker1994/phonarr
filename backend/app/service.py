@@ -18,6 +18,7 @@ from .config import cfg, msg
 from .db import Database
 from .logs import get_logger, traced
 from .sources import TitleList
+from .tvmaze import TVmaze
 
 log = get_logger("gateway")
 
@@ -190,6 +191,8 @@ class Gateway:
     def __init__(self, db: Database, titles: TitleList, transport: httpx.AsyncBaseTransport | None = None):
         self.db = db
         self.titles = titles
+        self.tvmaze = TVmaze()
+        self._tvmaze_ids: list[int] = []      # TVmaze shows whose Sonarr details are cached, most popular first
         self._discover_cache: tuple[float, list[dict]] | None = None
         self._search_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
         self.transport = transport
@@ -571,6 +574,13 @@ class Gateway:
                                                           "recommended" if raw.get("isRecommendation") else "import_list")
             except ArrError as e:
                 error = error or e.as_dict()
+        if media_type == "series":   # TVmaze's popular shows, once the background task has their Sonarr details
+            for tvdb in self.tvmaze_ready():
+                raw = self.db.get_metadata("series", tvdb, float("inf")) if tvdb not in cards else None
+                if raw:
+                    meta = normalize_series(raw)
+                    if meta["id"]:
+                        cards[meta["id"]] = self._card(meta, "tvmaze")
         missing = [i for i in self.titles.ids(media_type) if i not in cards]
         sem = asyncio.Semaphore(4)
 
@@ -1149,6 +1159,73 @@ class Gateway:
         interval = self.poll_interval() or POLL_FOREGROUND_QUIET
         if self.snapshot_at is None or time.monotonic() - self.snapshot_at > interval:
             await self.refresh_status()
+
+    # --------------------------------------------------------------- TVmaze (TV discovery)
+    def tvmaze_ready(self) -> list[int]:
+        if not self._tvmaze_ids:
+            self._tvmaze_ids = list((self.db.get_setting("tvmaze_pool") or {}).get("ready", []))
+        return self._tvmaze_ids
+
+    def tvmaze_info(self) -> dict:
+        pool = self.db.get_setting("tvmaze_pool") or {}
+        return {"enabled": cfg("tvmaze.enabled"), "scanned_at": pool.get("scanned_at"),
+                "shows": len(pool.get("shows", [])), "ready": len(pool.get("ready", []))}
+
+    async def refresh_tvmaze(self, force: bool = False) -> dict:
+        """Scan TVmaze when the saved pool is older than refresh_hours, then make sure every show in it has
+        Sonarr details cached (a few lookups at a time, so Sonarr is never flooded)."""
+        pool = self.db.get_setting("tvmaze_pool") or {}
+        # Stored, so wall clock; a scan "from the future" (clock went back) counts as stale.
+        age = time.time() - (pool.get("scanned_at") or 0)
+        if force or not pool.get("shows") or not 0 <= age < cfg("tvmaze.refresh_hours") * 3600:
+            shows = await self.tvmaze.popular()
+            pool = {"scanned_at": time.time(), "shows": [s["tvdb_id"] for s in shows], "ready": pool.get("ready", [])}
+            self.db.set_setting("tvmaze_pool", pool)
+        await self._resolve_tvmaze(pool)
+        return self.tvmaze_info()
+
+    async def _resolve_tvmaze(self, pool: dict) -> None:
+        if "sonarr" not in self.clients:
+            return
+        sem = asyncio.Semaphore(cfg("tvmaze.lookup_concurrency"))
+        looked_up = missing = 0
+
+        async def one(tvdb: int) -> bool:
+            nonlocal looked_up, missing
+            if self.db.get_metadata("series", tvdb, METADATA_TTL) is not None:
+                return True
+            async with sem:
+                try:
+                    raw = await self.lookup_raw("series", tvdb)
+                except ArrError as e:
+                    log.warning(msg("log.tvmaze_lookup_failed", tvdb=tvdb, error=e.message))
+                    return self.db.get_metadata("series", tvdb, float("inf")) is not None
+                await asyncio.sleep(cfg("tvmaze.lookup_gap"))
+            looked_up += 1
+            missing += raw is None
+            return raw is not None
+
+        oks = await asyncio.gather(*(one(t) for t in pool["shows"]))
+        ready = [t for t, ok in zip(pool["shows"], oks) if ok]
+        self.db.set_setting("tvmaze_pool", {**pool, "ready": ready})
+        self._tvmaze_ids = ready
+        log.info(msg("log.tvmaze_resolved", ready=len(ready), total=len(pool["shows"]), looked_up=looked_up,
+                     missing=missing))
+
+    async def run_tvmaze(self) -> None:
+        """Background loop: refresh the TVmaze pool when it's due. Never dies; a failure waits and retries."""
+        await asyncio.sleep(cfg("tvmaze.first_run_delay"))
+        while True:
+            wait = cfg("tvmaze.check_every")
+            if cfg("tvmaze.enabled") and "sonarr" in self.clients:
+                try:
+                    await self.refresh_tvmaze()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # network, TVmaze down, Sonarr down: try again later
+                    wait = cfg("tvmaze.retry_after_failure")
+                    log.warning(msg("log.tvmaze_failed", seconds=wait, error=e))
+            await asyncio.sleep(wait)
 
     async def run_poller(self) -> None:
         while True:

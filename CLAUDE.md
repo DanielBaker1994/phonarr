@@ -29,6 +29,7 @@ backend/                    THE BACKEND (runs in Docker next to Radarr/Sonarr)
   app/arr.py                Radarr/Sonarr v3 HTTP client and actionable error messages
   app/discovery.py          Filters, sorting, facets, "More like this" similarity (pure functions)
   app/sources.py            Optional titles list (titles.json, IDs only)
+  app/tvmaze.py             TV discovery: weekly background scan of TVmaze's popular shows (TVDB IDs), details via Sonarr
   app/db.py                 SQLite (stdlib)
   app/compat.py             API compatibility check: live probes, safe validation probes, OpenAPI spec diff, change history
   app/config.py             Config manager: cfg() reads config/settings.json (env overrides listed there), msg() reads config/messages.json;

@@ -78,7 +78,8 @@ On first launch enter the gateway address (`http://100.x.y.z:8787`) and token. S
 
 Every title can be requested; there is nothing to mark or approve. Discover, Movies and TV Shows show, merged and de-duplicated:
 
-1. **Radarr Discover**: your Radarr import lists plus Radarr's recommendations (`GET /api/v3/importlist/movie?includeRecommendations=true`).
+1. **Radarr Discover**: your Radarr import lists plus Radarr's recommendations (`GET /api/v3/importlist/movie?includeRecommendations=true`). Import lists with automatic add turned off are browsable without adding anything.
+1. **TVmaze, for TV** (`backend/app/tvmaze.py`): Sonarr has no discovery feed, so the gateway scans TVmaze's free, keyless API about once a week (setting `tvmaze.refresh_hours`). It keeps the most popular shows that have a TVDB ID (`tvmaze.count`, `tvmaze.min_weight`) and looks each one up through Sonarr in the background, a few at a time. Only TVDB IDs come from TVmaze, and nothing about you or your library is sent. Turn it off with `tvmaze.enabled`.
 2. **Your titles list** (optional): `titles.json` in the data folder with TMDB IDs for films and TVDB IDs for shows. IDs only; titles, posters and metadata come from Radarr and Sonarr. It's reloaded when it changes. See `backend/examples/titles.example.json`:
    ```json
    { "movies": [10331, 653, {"tmdb_id": 961}], "series": [{"tvdb_id": 70001}] }

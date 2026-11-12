@@ -307,6 +307,7 @@ It goes out through the iOS share sheet (AirDrop, Mail, Messages, Save to Files)
 | "answered, but not with the Radarr API (non-JSON)" | A reverse-proxy login page (Authelia and the like) is in front | Use the internal Docker URL instead |
 | Every request fails with "Choose a default … in Settings" | Several profiles or root folders and no default chosen | Settings → Request defaults |
 | "root folder … is not accessible" | A volume mount or permission problem in Radarr or Sonarr | Arr → Settings → Media Management |
+| TV Shows is empty | Sonarr has no discovery feed, so TV comes from TVmaze. The first scan starts 20 s after the gateway starts and takes a few minutes, then Sonarr lookups fill it in. Progress is in `tvmaze.log`, and the debug bundle's `info.json` has a `tvmaze` count. The gateway needs outbound HTTPS to `api.tvmaze.com` | Wait for the first scan, check `tvmaze.log` |
 | Discover is empty | Empty Radarr (no import lists or recommendations yet), no `titles.json`, or everything is already owned | Search in Movies/TV, add IDs to `titles.json`, or turn on "Show titles already in library" |
 | The app returns to the pairing / sign-in screen | `ARR_GATEWAY_TOKEN` was rotated | Enter the new token |
 | Web app page doesn't load at all | The container is down (the gateway serves the page), or Tailscale is off | `docker compose ps phonarr`; `/v1/health` from the server itself |

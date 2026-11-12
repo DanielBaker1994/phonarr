@@ -157,7 +157,8 @@ struct PosterCell: View {
             let strip = RatingStrip.items(card)
             if !strip.isEmpty {
                 Text(strip.map { "\($0.value) \($0.label)" }.joined(separator: "  "))
-                    .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
+                    .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary).lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)   // wraps instead of cutting ratings off
                     .frame(width: width, alignment: .leading)
                     .accessibilityLabel("Ratings: " + strip.map { "\($0.label) \($0.value)" }.joined(separator: ", "))
             }

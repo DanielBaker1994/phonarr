@@ -68,7 +68,7 @@ struct PosterCard: View {
                 .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
             Text(title ?? "Untitled")
                 .font(.footnote.weight(.medium))
-                .lineLimit(1)
+                .lineLimit(2, reservesSpace: true)   // two lines, reserved so grid rows line up
                 .frame(width: width, alignment: .leading)
             if let year {
                 Text(String(year)).font(.caption2).foregroundStyle(.secondary)

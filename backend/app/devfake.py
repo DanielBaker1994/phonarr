@@ -26,6 +26,7 @@ class FakeArr:
         self.sonarr_version = sonarr_version
         self.simulate = simulate
         self.fail_tmdb = {3085}
+        self.discover_fail: str | None = None   # "recommendations" (api.radarr.video down) or "all"
         self.movies: list[dict] = []
         self.series: list[dict] = []
         self.radarr_queue: list[dict] = []
@@ -152,10 +153,14 @@ class FakeArr:
         if path == "/api/v3/rootfolder":
             return httpx.Response(200, json=[{"path": "/movies", "freeSpace": 10**12, "accessible": True}])
         if path == "/api/v3/importlist/movie":
+            with_recs = params.get("includeRecommendations") == "true"
+            if self.discover_fail == "all" or (self.discover_fail == "recommendations" and with_recs):
+                return httpx.Response(500, json={"message": "HTTP request failed: [520:520] api.radarr.video"})
             owned = {m["tmdbId"] for m in self.movies}
             return httpx.Response(200, json=[{**self.movie_lookup[t], "isRecommendation": rec, "isExcluded": False,
                                               "isExisting": t in owned}
-                                             for t, rec in self.discover_ids if t in self.movie_lookup])
+                                             for t, rec in self.discover_ids
+                                             if t in self.movie_lookup and (with_recs or not rec)])
         if path == "/api/v3/movie/lookup":
             term = params.get("term", "").casefold()
             if term.startswith("tmdb:"):

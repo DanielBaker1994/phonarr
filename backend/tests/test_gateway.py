@@ -1386,3 +1386,19 @@ def test_tvmaze_pool_fills_the_tv_tab_without_owned_shows(client, fake):
     seen.clear()
     client.portal.call(gw.refresh_tvmaze)
     assert seen == []                                                              # not due again for a week
+
+
+def test_radarr_discover_survives_its_metadata_server_failing(tmp_path):
+    """api.radarr.video failing makes Radarr answer 500 for the whole feed. Keep the lists and the last
+    recommendations; if Radarr can't answer at all, serve the last good feed, even after a restart."""
+    fake = FakeArr(simulate=True)
+    with TestClient(create_app(tmp_path, fake.transport(), False, TOKEN)) as c:
+        configure(c)
+        everything = set(ids(c.get("/v1/discover?type=movie", headers=AUTH)))
+        assert {1010, 1011, 1012, 1013} <= everything
+        fake.discover_fail = "recommendations"
+        c.app.state.gateway._discover_cache = None
+        assert {1010, 1011, 1012, 1013} <= set(ids(c.get("/v1/discover?type=movie", headers=AUTH)))
+    fake.discover_fail = "all"
+    with TestClient(create_app(tmp_path, fake.transport(), False, TOKEN)) as c:      # restarted: nothing in memory
+        assert {1010, 1011, 1012, 1013} <= set(ids(c.get("/v1/discover?type=movie", headers=AUTH)))

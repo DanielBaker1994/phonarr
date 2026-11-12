@@ -512,13 +512,45 @@ class Gateway:
         """Radarr's own Discover feed: movies from your import lists plus its recommendations."""
         if self._discover_cache and not force and time.monotonic() - self._discover_cache[0] < POOL_TTL:
             return self._discover_cache[1]
-        items = await self.client("radarr").get("/api/v3/importlist/movie", includeRecommendations="true") or []
-        items = [m for m in items if m.get("tmdbId") and not m.get("isExcluded")]
+        radarr = self.client("radarr")
+        try:
+            items = await radarr.get("/api/v3/importlist/movie", includeRecommendations="true") or []
+        except ArrError as e:
+            # Recommendations come live from Radarr's metadata server (api.radarr.video), which sometimes fails and
+            # takes the whole call down. The lists themselves are in Radarr's database: ask again without them,
+            # and keep the last recommendations we had.
+            log.warning(msg("log.radarr_discover_degraded", error=e.message))
+            try:
+                items = await radarr.get("/api/v3/importlist/movie", includeRecommendations="false") or []
+            except ArrError:
+                items = []
+            items = [m for m in items if isinstance(m, dict)] + self._saved_discover(recommended_only=True)
+            if not any(not m.get("isRecommendation") for m in items):
+                saved = self._saved_discover()
+                if not saved:
+                    raise
+                items = saved      # Radarr can't answer at all: last good feed, rebuilt from cached metadata
+        items = [m for m in items if isinstance(m, dict) and m.get("tmdbId") and not m.get("isExcluded")]
+        seen: set[int] = set()
+        items = [m for m in items if not (m["tmdbId"] in seen or seen.add(m["tmdbId"]))]
         for m in items:   # same shape as a lookup: saves a lookup when the title is opened or requested
             if not m.get("isExisting"):
                 self.db.save_metadata("movie", m["tmdbId"], m)
+        self.db.set_setting("radarr_discover", [[m["tmdbId"], bool(m.get("isRecommendation"))] for m in items])
         self._discover_cache = (time.monotonic(), items)
         return items
+
+    def _saved_discover(self, recommended_only: bool = False) -> list[dict]:
+        """The last good Radarr Discover feed (IDs saved in the database, details from the metadata cache)."""
+        cached = {m["tmdbId"]: m for m in (self._discover_cache[1] if self._discover_cache else [])}
+        out = []
+        for tmdb, rec in self.db.get_setting("radarr_discover") or []:
+            if recommended_only and not rec:
+                continue
+            raw = cached.get(tmdb) or self.db.get_metadata("movie", tmdb, float("inf"))
+            if raw:
+                out.append({**raw, "isRecommendation": rec})
+        return out
 
     @traced
     async def search(self, media_type: str, term: str) -> list[dict]:

@@ -91,7 +91,8 @@
     "tvmaze_rate_limited": "TVmaze kept rate-limiting page {page}",
     "tvmaze_failed": "TVmaze scan failed, trying again in {seconds} s: {error}",
     "tvmaze_resolved": "TVmaze: {ready} of {total} shows have Sonarr details ({looked_up} looked up now, {missing} unknown to Sonarr)",
-    "tvmaze_lookup_failed": "TVmaze: Sonarr lookup for tvdb {tvdb} failed: {error}"
+    "tvmaze_lookup_failed": "TVmaze: Sonarr lookup for tvdb {tvdb} failed: {error}",
+    "radarr_discover_degraded": "Radarr Discover with recommendations failed ({error}); using the lists without them plus the last recommendations"
   },
   "compat": {
     "server_error": "The server answered with its own error (HTTP {status}), so fields couldn't be checked: {message}. This is usually not an API change; check System → Status in that app.",

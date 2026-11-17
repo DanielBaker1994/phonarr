@@ -195,11 +195,12 @@ final class AppModel {
         }
     }
 
-    /// Radarr/Sonarr title search for anything not already in discovery (2+ characters).
+    /// Radarr/Sonarr title search for anything not already in discovery (2+ characters). Titles already requested
+    /// (downloading, complete, failed...) come back too, with their status, so a search never silently hides them.
     func search(_ type: MediaType, query: String) async -> (items: [MediaCard], error: String?) {
         do {
             let r = try await api.discover(type, includeTracked: true, query: query)
-            let found = r.items.filter { $0.source == DiscoverySource.search.rawValue }
+            let found = r.items.filter { $0.source == DiscoverySource.search.rawValue || $0.status.state != .notRequested }
             for item in found where statuses[item.key] == nil { statuses[item.key] = item.status }
             return (found, r.error?.message)
         } catch is CancellationError {

@@ -649,10 +649,16 @@ class Gateway:
         if len(q) >= 2:
             searched = True
             try:
-                known = {c["id"] for c in cards}
-                found = [c for c in await self.search(media_type, q) if c["id"] not in known]
-                for c in found:
-                    c["status"] = self.status_for(media_type, c["id"])
+                pool = {c["id"]: c for c in cards}
+                for c in await self.search(media_type, q):
+                    known = pool.get(c["id"])
+                    if known is None:
+                        found.append({**c, "status": self.status_for(media_type, c["id"])})
+                    elif known["status"]["state"] != "not_requested":
+                        # Already requested (in the library, maybe failed): a search must still show it with its
+                        # status, or it looks like the title doesn't exist. Matched by the lookup, so it counts even
+                        # when the term only matches an alternate title.
+                        found.append(known)
             except ArrError as e:
                 service_error = service_error or e.as_dict()
         if not include_tracked:
@@ -661,7 +667,8 @@ class Gateway:
         all_facets = discovery.facets(cards)       # facets describe the unfiltered set
         total = len(cards)
         neighbours = all_facets["genre_neighbours"]
-        matched = discovery.apply_filters(cards, filters, neighbours)
+        found_ids = {c["id"] for c in found}
+        matched = [c for c in discovery.apply_filters(cards, filters, neighbours) if c["id"] not in found_ids]
         # Lookup results already match the search term (often by an alternate title): filter on everything else.
         matched += discovery.apply_filters(found, {**filters, "q": None}, neighbours)
         items = discovery.sort_cards(matched, sort or cfg("discovery.default_sort"))

@@ -206,11 +206,13 @@ export async function loadDiscover(type) {
   }
 }
 
-/** Radarr/Sonarr title search for anything not already in discovery (2+ characters). */
+/** Radarr/Sonarr title search for anything not already in discovery (2+ characters). Titles already requested
+ *  (downloading, complete, failed...) come back too, with their status: the catalogue hides them, and a search
+ *  that silently leaves them out looks like the title doesn't exist. */
 export async function search(type, query) {
   try {
     const r = await api.discover(type, true, query);
-    const found = r.items.filter((c) => c.source === "search");
+    const found = r.items.filter((c) => c.source === "search" || c.status?.state !== "not_requested");
     for (const item of found) if (!state.statuses[cardKey(item)]) state.statuses[cardKey(item)] = item.status;
     return { items: found, error: r.error?.message || null };
   } catch (e) {

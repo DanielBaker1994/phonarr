@@ -115,6 +115,29 @@ def test_search_finds_titles_outside_the_list(client, fake):
     assert client.post("/v1/requests", json={"type": "movie", "id": 603}, headers=AUTH).status_code == 200
 
 
+def test_search_still_shows_requested_and_failed_titles(client, fake):
+    """A requested title (here a failed download) is hidden from the catalogue, but searching for it must still find it,
+    with its status, instead of leaving the search empty as if the title didn't exist."""
+    configure(client)
+    assert client.post("/v1/requests", json={"type": "movie", "id": 603}, headers=AUTH).status_code == 200
+    mid = next(m["id"] for m in fake.movies if m["tmdbId"] == 603)
+    fake.radarr_queue = [{"id": 9, "movieId": mid, "size": 1000, "sizeleft": 900, "status": "failed",
+                          "trackedDownloadStatus": "error", "trackedDownloadState": "failed",
+                          "errorMessage": "Download client reported failure"}]
+    gw = client.app.state.gateway
+    client.portal.call(gw.refresh_status)
+    gw._search_cache.clear()
+    r = client.get("/v1/discover?type=movie&q=matrix&include_tracked=true", headers=AUTH).json()
+    hits = [(i["id"], i["status"]["state"]) for i in r["items"]]
+    assert hits == [(603, "failed")]                                # once, with its status
+    # Radarr's lookup can match on an alternate title the card doesn't carry: still shown, still once
+    fake.lookup_answer["radarr"] = [fake.movie_lookup[603]]
+    r = client.get("/v1/discover?type=movie&q=neo&include_tracked=true", headers=AUTH).json()
+    assert [(i["id"], i["status"]["state"]) for i in r["items"]] == [(603, "failed")]
+    plain = client.get("/v1/discover?type=movie&q=matrix", headers=AUTH).json()
+    assert plain["items"] == []                                     # the catalogue view still hides tracked titles
+
+
 def test_unknown_title_is_404_and_adds_nothing(client, fake):
     configure(client)
     r = client.post("/v1/requests", json={"type": "movie", "id": 12345}, headers=AUTH)

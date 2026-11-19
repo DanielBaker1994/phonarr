@@ -302,7 +302,6 @@ enum ShelfBuilder {
         add("newest", "Newest", FilterState.newestFirst(cards.filter { ($0.year ?? Int.max) <= thisYear }))
         let rated = cards.filter { $0.rating != nil }.sorted { ($0.rating ?? 0) > ($1.rating ?? 0) }
         add("rated", "Highest rated", rated)
-        add("early", "Before 1930", cards.filter { ($0.year ?? 9999) < 1930 }.sorted { ($0.year ?? 0) < ($1.year ?? 0) })
         add("short", "Under 90 minutes", cards.filter { ($0.runtime ?? 0) > 0 && ($0.runtime ?? 0) < 90 })
         let genreCounts = Dictionary(cards.flatMap { $0.genres }.map { ($0, 1) }, uniquingKeysWith: +)
         for genre in genreCounts.sorted(by: { $0.value > $1.value }).prefix(4).map(\.key) {

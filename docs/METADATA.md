@@ -94,7 +94,7 @@ Both frontends filter and sort the discovery pool on the device for instant resu
 
 A filter is shown only when the current set has at least two values for it, so there are no dead filters. The gateway still accepts the older `decade` and `runtime` (band) parameters.
 
-Discover also builds shelves automatically from the same data: "Before 1930", one per decade (newest first, ending with "The 1960s & older"), the top genres, "Under 90 minutes" and "Highest rated".
+Discover also builds shelves automatically from the same data: one per decade (newest first, ending with "The 1960s & older"), the top genres, "Under 90 minutes" and "Highest rated".
 
 ## How "More like this" scores titles
 `backend/app/discovery.py::similarity`. Weighted sum, each part between 0 and 1:

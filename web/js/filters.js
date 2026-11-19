@@ -209,7 +209,6 @@ export function buildShelves(cards, minimum = 3, thisYear = new Date().getFullYe
   add("trending", "New & trending", sortCards(cards.filter((c) => trendingScore(c, thisYear) != null), "trending", thisYear));
   add("newest", "Newest", newestFirst(cards.filter((c) => c.year != null && c.year <= thisYear)));
   add("rated", "Highest rated", cards.filter((c) => c.rating != null).sort((a, b) => b.rating - a.rating));
-  add("early", "Before 1930", cards.filter((c) => (c.year ?? 9999) < 1930).sort((a, b) => (a.year ?? 0) - (b.year ?? 0)));
   add("short", "Under 90 minutes", cards.filter((c) => c.runtime > 0 && c.runtime < 90));
   const counts = new Map();
   for (const c of cards) for (const g of c.genres || []) counts.set(g, (counts.get(g) || 0) + 1);

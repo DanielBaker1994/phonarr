@@ -99,6 +99,7 @@ test("decade shelves run newest first, and the gateway's oldest group reads '196
   const pool = [mk(1, 2021), mk(2, 2022), mk(3, 2023), mk(4, 1951), mk(5, 1962), mk(6, 1930), mk(7, 2011), mk(8, 2012), mk(9, 2015)];
   const titles = buildShelves(pool).filter((s) => s.id.startsWith("decade-")).map((s) => s.title);
   assert.deepEqual(titles, ["The 2020s", "The 2010s", "The 1960s & older"]);
+  assert.ok(!buildShelves(pool).some((s) => s.id === "early"), "no separate Before 1930 shelf: it's inside 1960s & older");
 });
 
 test("New & trending: titles from this year and last, by popularity (films) or total votes (TV), as discovery.py", () => {

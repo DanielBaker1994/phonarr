@@ -1487,6 +1487,8 @@ def test_posters_and_backdrops_use_small_sizes_not_originals(client, fake):
     assert sized_image(tvdb.replace(".jpg", "_t.jpg"), "poster") == tvdb.replace(".jpg", "_t.jpg")   # once only
     legacy = "https://artworks.thetvdb.com/banners/series/384541/posters/5ef503b89742f.jpg"
     assert sized_image(legacy, "poster") == legacy.replace(".jpg", "_t.jpg")
+    flat = "https://artworks.thetvdb.com/banners/posters/5d02ad601244e.jpg"           # oldest layout, no series folder
+    assert sized_image(flat, "poster") == flat.replace(".jpg", "_t.jpg")
     fanart = "https://artworks.thetvdb.com/banners/v4/series/468481/backgrounds/x.jpg"
     assert sized_image(fanart, "fanart") == fanart                              # TVDB's _t is too small for a backdrop
     other = "https://example.org/poster.jpg"

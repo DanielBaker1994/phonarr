@@ -63,7 +63,7 @@ class GatewayError(Exception):
 
 
 _TMDB_ORIGINAL = re.compile(r"^(https?://image\.tmdb\.org/t/p/)original/")
-_TVDB_POSTER = re.compile(r"^(https?://artworks\.thetvdb\.com/banners/.*/posters/[^/?#]+?)(\.(?:jpe?g|png|webp))$", re.I)
+_TVDB_POSTER = re.compile(r"^(https?://artworks\.thetvdb\.com/banners/(?:.*/)?posters/[^/?#]+?)(\.(?:jpe?g|png|webp))$", re.I)
 
 
 def sized_image(url: str, cover: str) -> str:

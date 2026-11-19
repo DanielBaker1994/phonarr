@@ -56,7 +56,7 @@ Richness: ●●● present for nearly every title · ●●○ usually present,
 | `source` | `library`, `list` (titles.json), `import_list`, `recommended` (Radarr Discover), `tvmaze` (popular TV from TVmaze), `search` | "Found in" filter, "Recommended by Radarr" shelf |
 | `added` | Radarr/Sonarr `added` date, for library titles | "Recently added" sort |
 
-Radarr's Discover feed (`GET /api/v3/importlist/movie?includeRecommendations=true`) returns the same `MovieResource` shape as a lookup, plus `isRecommendation`, `isExcluded` and `isExisting`. The gateway caches it for 10 minutes and stores each entry as lookup metadata, so opening or requesting one doesn't need another lookup.
+Radarr's Discover feed (`GET /api/v3/importlist/movie?includeRecommendations=true`) returns the same `MovieResource` shape as a lookup, plus `isRecommendation`, `isExcluded` and `isExisting`. The gateway caches it for 10 minutes (after that the last feed is served while a fresh one loads in the background) and stores each entry as lookup metadata, so opening or requesting one doesn't need another lookup.
 
 ## Calendar (`GET /api/v3/calendar`)
 
@@ -88,13 +88,13 @@ Both frontends filter and sort the discovery pool on the device for instant resu
 - **English only** keeps titles whose `originalLanguage` is English (`discovery.english_names`), and titles with no language at all (Radarr v3 and Sonarr v3 send none), so missing data never hides a title. When it's off, the Language picker appears.
 - **Genres:** tap once to include (any-of), again to exclude. An excluded genre always wins.
 - **Neighbouring genres:** once a genre is picked, genres whose titles overlap with it by at least 15% (`discovery.neighbours.min_overlap`; titles in both ÷ titles in either, worked out from the pool and sent as `facets.genre_neighbours`) count as matches too. Using overlap rather than "share of the pick's titles" stops a broad genre like Drama from being everyone's neighbour. On by default, each one can be dropped, and a card that matched only through one says "via Thriller".
-- **Year:** Any, Decades (several at once) or an exact Range such as 2005–2010, inclusive; one at a time, and switching clears the other. `facets.years` gives the range's bounds.
+- **Year:** Any, Decades (several at once, newest first; everything up to `discovery.oldest_decade`, 1960, is one "1960s & older" group, and `decade=1920` means that group) or an exact Range such as 2005–2010, inclusive; one at a time, and switching clears the other. `facets.years` gives the range's bounds.
 - **Length:** at least / at most, in minutes (`filters.runtime_steps`). A title with no runtime is hidden only when "at most" is set.
 - **Also:** minimum rating, studio or network, collection, certification, series status, where it was found. Sort can switch to title, newest, oldest, most popular, shortest, longest or recently added.
 
 A filter is shown only when the current set has at least two values for it, so there are no dead filters. The gateway still accepts the older `decade` and `runtime` (band) parameters.
 
-Discover also builds shelves automatically from the same data: "Before 1930", one per decade, the top genres, "Under 90 minutes" and "Highest rated".
+Discover also builds shelves automatically from the same data: "Before 1930", one per decade (newest first, ending with "The 1960s & older"), the top genres, "Under 90 minutes" and "Highest rated".
 
 ## How "More like this" scores titles
 `backend/app/discovery.py::similarity`. Weighted sum, each part between 0 and 1:

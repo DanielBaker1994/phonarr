@@ -26,11 +26,21 @@ const TAB_ITEMS = [
   ["settings", "Settings", "gear"],
 ];
 
+// Movies and TV Shows stay mounted (hidden) once opened, like tabs in the iPhone app: switching back is instant,
+// with the same posters, scroll position, search and filters, instead of rebuilding a grid of hundreds of posters.
+const GRIDS = { movies: "movie", tv: "series" };
+const openedGrids = new Set();
+
+function Screens({ route }) {
+  if (GRIDS[route.name]) openedGrids.add(route.name);
+  return html`${[...openedGrids].map((name) => html`<div key=${name} hidden=${route.name !== name}>
+      <${MediaGridView} type=${GRIDS[name]} /></div>`)}
+    ${!GRIDS[route.name] && html`<${Screen} route=${route} />`}`;
+}
+
 function Screen({ route }) {
   const [a, b] = route.params;
   switch (route.name) {
-    case "movies": return html`<${MediaGridView} type="movie" />`;
-    case "tv": return html`<${MediaGridView} type="series" />`;
     case "activity": return html`<${ActivityView} />`;
     case "title": return html`<${TitleDetailView} key=${`${a}:${b}`} type=${a === "series" ? "series" : "movie"} id=${Number(b)} />`;
     case "similar": return html`<${SimilarListView} key=${`${a}:${b}`} type=${a === "series" ? "series" : "movie"} id=${Number(b)} />`;
@@ -90,7 +100,7 @@ function App() {
   if (!state.paired && state.authChecking) body = html`<div class="center pad"><${Spinner} /></div>`;
   else if (!state.paired) body = html`<${SignInView} />`;
   else if (!state.onboardingComplete) body = html`<${SetupFlowView} />`;
-  else body = html`<${ScreenBoundary} routeKey=${location.hash}><${Screen} route=${route} /><//><${TabBar} current=${route.tab} />`;
+  else body = html`<${ScreenBoundary} routeKey=${location.hash}><${Screens} route=${route} /><//><${TabBar} current=${route.tab} />`;
   return html`<div class="app">${body}<${CustomizeSheet} /><${PosterMenu} /><${Toast} /></div>`;
 }
 

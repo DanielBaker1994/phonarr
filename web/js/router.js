@@ -37,7 +37,11 @@ export function back(fallback = `#/${lastTab}`) {
   else location.replace(fallback);
 }
 
-window.addEventListener("hashchange", () => {
+window.addEventListener("hashchange", (e) => {
+  // The old page is still on screen here: remember where it was scrolled to, so tab bar switches
+  // (plain links, not go()) come back to the same place too.
+  const old = new URL(e.oldURL).hash || "#/discover";
+  if (TABS.includes(old.replace(/^#\/?/, "").split("/")[0])) scroll.set(old, window.scrollY);
   if (stack.length && stack[stack.length - 1] === here()) stack.pop();   // went back (ours or the browser's)
   const y = scroll.get(here()) || 0;
   emit();

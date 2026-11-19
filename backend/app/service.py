@@ -5,6 +5,7 @@ import asyncio
 from collections import Counter
 import hashlib
 import json
+import re
 import time
 from typing import Any
 
@@ -61,12 +62,31 @@ class GatewayError(Exception):
         self.status, self.kind, self.message = status, kind, message
 
 
+_TMDB_ORIGINAL = re.compile(r"^(https?://image\.tmdb\.org/t/p/)original/")
+_TVDB_POSTER = re.compile(r"^(https?://artworks\.thetvdb\.com/banners/.*/posters/[^/?#]+?)(\.(?:jpe?g|png|webp))$", re.I)
+
+
+def sized_image(url: str, cover: str) -> str:
+    """Radarr and Sonarr hand out full-size originals (TMDB's are often 1 MB+), while a card shows ~124 px.
+    Swap in the sizes from gateway.images: TMDB's sized path (w342 posters, w1280 backdrops, ~15x smaller) and
+    TheTVDB's _t poster thumbnail (~4x smaller). Anything else is left as it is."""
+    sizes = cfg("gateway.images")
+    tmdb_size = sizes.get("tmdb_poster" if cover == "poster" else "tmdb_fanart")
+    if tmdb_size and tmdb_size != "original":
+        url = _TMDB_ORIGINAL.sub(rf"\g<1>{tmdb_size}/", url)
+    if cover == "poster" and sizes.get("tvdb_poster_thumbnail"):
+        m = _TVDB_POSTER.match(url)
+        if m and not m.group(1).endswith("_t"):
+            url = f"{m.group(1)}_t{m.group(2)}"
+    return url
+
+
 def _image(images: list[dict] | None, cover: str) -> str | None:
     for img in images or []:
         if img.get("coverType") == cover:
             url = img.get("remoteUrl") or img.get("url")
             if url and url.startswith("http"):
-                return url
+                return sized_image(url, cover)
     return None
 
 
@@ -104,7 +124,7 @@ def _keywords(x: dict) -> list[str]:
 def normalize_movie(m: dict) -> dict:
     collection = m.get("collection") or {}
     return {
-        "decade": (m["year"] // 10) * 10 if m.get("year") else None,
+        "decade": discovery.decade(m.get("year")),
         **_rating_fields(_movie_ratings(m), "movie"),
         "popularity": m.get("popularity"),
         "language": _lang(m),
@@ -124,7 +144,7 @@ def normalize_movie(m: dict) -> dict:
 def normalize_series(s: dict) -> dict:
     r = s.get("ratings") or {}
     return {
-        "decade": (s["year"] // 10) * 10 if s.get("year") else None,
+        "decade": discovery.decade(s.get("year")),
         **_rating_fields({"tvdb": {"value": r["value"], "votes": r.get("votes") or 0}} if r.get("value") else {},
                          "series"),
         "popularity": None,
@@ -194,6 +214,7 @@ class Gateway:
         self.tvmaze = TVmaze()
         self._tvmaze_ids: list[int] = []      # TVmaze shows whose Sonarr details are cached, most popular first
         self._discover_cache: tuple[float, list[dict]] | None = None
+        self._discover_task: asyncio.Task | None = None   # background refresh of a stale Radarr Discover feed
         self._search_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
         self.transport = transport
         self.clients: dict[str, ArrClient] = {}
@@ -235,6 +256,8 @@ class Gateway:
         self.calendar_cache.clear(service)
         if service == "radarr":
             self._discover_cache = None
+            if self._discover_task and not self._discover_task.done():
+                self._discover_task.cancel()   # it was fetching from the old connection
         if old:
             await old.aclose()
 
@@ -509,9 +532,28 @@ class Gateway:
         return normalize_movie(raw) if media_type == "movie" else normalize_series(raw)
 
     async def radarr_discover(self, force: bool = False) -> list[dict]:
-        """Radarr's own Discover feed: movies from your import lists plus its recommendations."""
-        if self._discover_cache and not force and time.monotonic() - self._discover_cache[0] < POOL_TTL:
+        """Radarr's own Discover feed: movies from your import lists plus its recommendations.
+        Stale-while-revalidate: once the feed is older than gateway.ttl.pool, the last one is returned at once
+        and a fresh one is fetched in the background (that Radarr call takes ~2 s), so no request waits for it."""
+        if self._discover_cache and not force:
+            if time.monotonic() - self._discover_cache[0] >= POOL_TTL:
+                self._refresh_discover_in_background()
             return self._discover_cache[1]
+        return await self._fetch_radarr_discover()
+
+    def _refresh_discover_in_background(self) -> None:
+        if self._discover_task and not self._discover_task.done():
+            return
+
+        async def _run():
+            try:
+                await self._fetch_radarr_discover()
+            except Exception as e:
+                log.warning(msg("log.radarr_discover_refresh_failed", error=getattr(e, "message", None) or repr(e)))
+
+        self._discover_task = asyncio.create_task(_run())
+
+    async def _fetch_radarr_discover(self) -> list[dict]:
         radarr = self.client("radarr")
         try:
             items = await radarr.get("/api/v3/importlist/movie", includeRecommendations="true") or []
@@ -1296,5 +1338,7 @@ class Gateway:
             await self.refresh_status()
 
     async def aclose(self) -> None:
+        if self._discover_task and not self._discover_task.done():
+            self._discover_task.cancel()
         for c in self.clients.values():
             await c.aclose()

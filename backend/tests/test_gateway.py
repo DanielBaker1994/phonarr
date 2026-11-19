@@ -541,7 +541,22 @@ def ids(resp):
     return [i["id"] for i in resp.json()["items"]]
 
 
-def test_filters_and_sorting(rich):
+@pytest.fixture
+def early_decades(tmp_path, monkeypatch):
+    """The fake catalogue is all pre-1970, which discovery.oldest_decade (1960) puts in one group. Tests of
+    decade filtering itself lower the cutoff so the early decades stay apart."""
+    from app import config
+    conf = tmp_path / "conf"
+    conf.mkdir()
+    (conf / "settings.json").write_text(json.dumps({"discovery": {"oldest_decade": 1900}}))
+    monkeypatch.setenv("CONFIG_DIR", str(conf))
+    config.reload()
+    yield
+    monkeypatch.delenv("CONFIG_DIR")
+    config.reload()
+
+
+def test_filters_and_sorting(early_decades, rich):
     d = lambda qs: rich.get("/v1/discover?type=movie&" + qs, headers=AUTH)  # noqa: E731
     assert set(ids(d("genres=Horror"))) == {10331, 1010, 1012, 1013, 653}
     assert set(ids(d("genres=Crime,Comedy"))) == {1011, 1012, 961}                    # any-of
@@ -557,7 +572,7 @@ def test_filters_and_sorting(rich):
     assert d("sort=bogus").status_code == 422
 
 
-def test_new_filters_english_decades_runtime_range_neighbours(rich):
+def test_new_filters_english_decades_runtime_range_neighbours(early_decades, rich):
     d = lambda qs: rich.get("/v1/discover?type=movie&" + qs, headers=AUTH)  # noqa: E731
     assert set(ids(d("english_only=true"))) == {10331, 1010, 1011, 1012, 1013, 961}   # 961 has no language: kept
     assert set(ids(d("decades=1920,1960"))) == {653, 961, 10331, 1010, 1012}
@@ -591,13 +606,27 @@ def test_discover_sorts_by_trusted_rating_and_pages_without_cap(rich):
     assert rich.get("/v1/discover?type=movie&page_size=0", headers=AUTH).status_code == 422
 
 
-def test_facets_describe_unfiltered_set(rich):
+def test_facets_describe_unfiltered_set(early_decades, rich):
     r = rich.get("/v1/discover?type=movie&genres=Crime", headers=AUTH).json()
     assert r["total"] == 7 and len(r["items"]) == 1
     f = r["facets"]
     assert {"value": "Horror", "count": 5} in f["genres"]
-    assert [d["value"] for d in f["decades"]] == ["1920", "1940", "1950", "1960"]
+    assert [d["value"] for d in f["decades"]] == ["1960", "1950", "1940", "1920"]          # newest first
     assert f["rated"] == 6
+
+
+def test_decades_group_1960_and_older_newest_first(rich):
+    """discovery.oldest_decade = 1960: 1960s and earlier share one group ("1960s & older"), so a 1920s film
+    is filtered and faceted as 1960, and asking for decade=1920 means that group."""
+    from app.discovery import decade
+    assert decade(2024) == 2020 and decade(1975) == 1970 and decade(1968) == 1960 and decade(1922) == 1960
+    assert decade(None) is None
+    r = rich.get("/v1/discover?type=movie", headers=AUTH).json()
+    assert {i["decade"] for i in r["items"] if i.get("year")} == {1960}
+    assert [d["value"] for d in r["facets"]["decades"]] == ["1960"]
+    everything = set(ids(rich.get("/v1/discover?type=movie", headers=AUTH)))
+    with_year = {i["id"] for i in r["items"] if i.get("year")}
+    assert set(ids(rich.get("/v1/discover?type=movie&decade=1920", headers=AUTH))) == with_year <= everything
 
 
 def test_more_like_this_ranks_by_metadata(rich):
@@ -1425,6 +1454,50 @@ def test_radarr_discover_survives_its_metadata_server_failing(tmp_path):
     fake.discover_fail = "all"
     with TestClient(create_app(tmp_path, fake.transport(), False, TOKEN)) as c:      # restarted: nothing in memory
         assert {1010, 1011, 1012, 1013} <= set(ids(c.get("/v1/discover?type=movie", headers=AUTH)))
+
+
+def test_stale_radarr_discover_is_served_at_once_and_refreshed_in_the_background(client, fake):
+    """Past gateway.ttl.pool the last feed comes back straight away (Radarr's Discover call takes ~2 s) while a
+    fresh one is fetched in the background; the next load has it."""
+    configure(client)
+    gw = client.app.state.gateway
+    fake.discover_ids = [(1010, True), (1013, False)]
+    assert {1010, 1013} <= set(ids(client.get("/v1/discover?type=movie", headers=AUTH)))
+    fake.discover_ids = [(1010, True)]
+    stamp, items = gw._discover_cache
+    gw._discover_cache = (stamp - 10**6, items)                                  # long past the TTL
+    assert 1013 in set(ids(client.get("/v1/discover?type=movie", headers=AUTH)))  # stale, no wait
+
+    async def finished():
+        await gw._discover_task
+    client.portal.call(finished)
+    after = set(ids(client.get("/v1/discover?type=movie", headers=AUTH)))
+    assert 1010 in after and 1013 not in after
+
+
+def test_posters_and_backdrops_use_small_sizes_not_originals(client, fake):
+    """Radarr/Sonarr hand out full-size originals (TMDB posters are often 1 MB+); cards are ~124 px wide.
+    TMDB gets its sized paths (w342 posters, w1280 backdrops), TheTVDB posters their _t thumbnail."""
+    from app.service import sized_image
+    tmdb = "https://image.tmdb.org/t/p/original/abc.jpg"
+    assert sized_image(tmdb, "poster") == "https://image.tmdb.org/t/p/w342/abc.jpg"
+    assert sized_image(tmdb, "fanart") == "https://image.tmdb.org/t/p/w1280/abc.jpg"
+    tvdb = "https://artworks.thetvdb.com/banners/v4/series/468481/posters/6a26e5697aca0.jpg"
+    assert sized_image(tvdb, "poster") == tvdb.replace(".jpg", "_t.jpg")
+    assert sized_image(tvdb.replace(".jpg", "_t.jpg"), "poster") == tvdb.replace(".jpg", "_t.jpg")   # once only
+    legacy = "https://artworks.thetvdb.com/banners/series/384541/posters/5ef503b89742f.jpg"
+    assert sized_image(legacy, "poster") == legacy.replace(".jpg", "_t.jpg")
+    fanart = "https://artworks.thetvdb.com/banners/v4/series/468481/backgrounds/x.jpg"
+    assert sized_image(fanart, "fanart") == fanart                              # TVDB's _t is too small for a backdrop
+    other = "https://example.org/poster.jpg"
+    assert sized_image(other, "poster") == other
+
+    configure(client)
+    fake.movie_lookup[10331]["images"] = [{"coverType": "poster", "remoteUrl": tmdb},
+                                          {"coverType": "fanart", "remoteUrl": tmdb.replace("abc", "bg")}]
+    d = client.get("/v1/titles/movie/10331", headers=AUTH).json()
+    assert d["poster"] == "https://image.tmdb.org/t/p/w342/abc.jpg"
+    assert d["fanart"] == "https://image.tmdb.org/t/p/w1280/bg.jpg"
 
 
 def test_auth_can_be_turned_off(client, monkeypatch):

@@ -70,6 +70,8 @@ Unless a row says otherwise, frontend behaviour applies to both the web app and 
 | Junk entries in `titles.json` | Skipped and logged | ✅ |
 | An ID in `titles.json` Radarr/Sonarr can't find | Hidden and logged | 🟢 |
 | Excluded titles in Radarr's Discover feed | Hidden | ✅ |
+| Radarr's Discover feed older than `gateway.ttl.pool` (the call takes ~2 s) | The last feed is served at once and refreshed in the background; a failed refresh is logged and the last feed stays | ✅ `test_stale_radarr_discover_is_served_at_once…` |
+| Radarr/Sonarr hand out full-size poster originals (TMDB often 1 MB+) | The gateway sends sized URLs (`gateway.images`): TMDB `w342` posters and `w1280` backdrops, TheTVDB `_t` poster thumbnails; other hosts untouched. Both frontends get them | ✅ `test_posters_and_backdrops_use_small_sizes…` |
 | Search term matches only an alternate title | Lookup results are kept even when the shown title doesn't contain the term | ✅ |
 | Lookup answers an error object or `null` (Arr starting up) | Shown as a search error, never cached as "no results", never a 500 | ✅ `test_search_does_not_cache…` (KB-06) |
 | Typing while a search is running (iPhone) | The cancelled search shows no error and doesn't leave the spinner on | 🟢 (KB-05) |

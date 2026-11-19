@@ -120,7 +120,7 @@ struct FilterSheet: View {
             }
             .pickerStyle(.segmented)
             if filters.yearMode == .decades, let decades = facets.decades, !decades.isEmpty {
-                ChipFlow(values: decades, label: { "\($0)s" }, isOn: { filters.decades.contains(Int($0) ?? -1) }) { v in
+                ChipFlow(values: decades, label: { DecadeLabel.text(Int($0) ?? 0) }, isOn: { filters.decades.contains(Int($0) ?? -1) }) { v in
                     guard let d = Int(v) else { return }
                     if filters.decades.contains(d) { filters.decades.remove(d) } else { filters.decades.insert(d) }
                 }

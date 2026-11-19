@@ -112,6 +112,11 @@
       "pool": 600,
       "search": 300
     },
+    "images": {
+      "tmdb_poster": "w342",
+      "tmdb_fanart": "w1280",
+      "tvdb_poster_thumbnail": true
+    },
     "retry_cooldown": 30,
     "compat_every": 86400,
     "poll": {
@@ -175,6 +180,7 @@
       "English"
     ],
     "default_sort": "year_desc",
+    "oldest_decade": 1960,
     "trending_years": 2,
     "page_size_max": 500
   },

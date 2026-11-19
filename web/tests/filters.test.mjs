@@ -1,7 +1,7 @@
 // node --test web/tests/*.test.mjs   (run by ../../test.sh). Checks the client-side filters behave like backend/app/discovery.py.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyFilters, buildShelves, emptyFilters, activeCount, sortCards, genreNeighbours, neighboursFor, viaNeighbour, ratingStrip, trendingScore } from "../js/filters.js";
+import { applyFilters, buildShelves, decadeLabel, emptyFilters, activeCount, sortCards, genreNeighbours, neighboursFor, viaNeighbour, ratingStrip, trendingScore } from "../js/filters.js";
 
 const cards = [
   { type: "movie", id: 1, title: "Nosferatu", original_title: "Nosferatu, eine Symphonie des Grauens", year: 1922, decade: 1920,
@@ -90,6 +90,15 @@ test("shelves need at least three titles", () => {
   assert.deepEqual(shelves.map((s) => s.id), ["newest", "rated"]);
   assert.deepEqual(ids(shelves[0].items), [3, 4, 2, 1]);
   assert.deepEqual(ids(shelves[1].items), [1, 3, 4]);
+});
+
+test("decade shelves run newest first, and the gateway's oldest group reads '1960s & older'", () => {
+  assert.equal(decadeLabel(2010), "2010s");
+  assert.equal(decadeLabel(1960), "1960s & older");
+  const mk = (id, year) => ({ type: "movie", id, title: `T${id}`, year, decade: Math.max(Math.floor(year / 10) * 10, 1960), genres: [] });
+  const pool = [mk(1, 2021), mk(2, 2022), mk(3, 2023), mk(4, 1951), mk(5, 1962), mk(6, 1930), mk(7, 2011), mk(8, 2012), mk(9, 2015)];
+  const titles = buildShelves(pool).filter((s) => s.id.startsWith("decade-")).map((s) => s.title);
+  assert.deepEqual(titles, ["The 2020s", "The 2010s", "The 1960s & older"]);
 });
 
 test("New & trending: titles from this year and last, by popularity (films) or total votes (TV), as discovery.py", () => {

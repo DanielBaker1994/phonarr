@@ -1,4 +1,9 @@
 {
+  "filters": {
+    "decade": "{decade}s",
+    "oldest_decade": "{decade}s & older",
+    "decade_shelf": "The {label}"
+  },
   "log": {
     "launch": "Launch Phonarr web on {agent}",
     "sw_failed": "Service worker not registered: {error}",

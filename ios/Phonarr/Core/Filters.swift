@@ -43,6 +43,15 @@ enum RuntimeBand: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// "2010s", or "1960s & older" for the group the gateway puts everything up to filters.oldest_decade in.
+/// Mirrors decadeLabel in web/js/filters.js.
+enum DecadeLabel {
+    static func text(_ decade: Int) -> String {
+        let key = decade <= AppConfig.int("filters.oldest_decade", default: 1960) ? "filters.oldest_decade" : "filters.decade"
+        return AppConfig.text(key, ["decade": String(decade)])
+    }
+}
+
 enum YearMode: String, CaseIterable, Identifiable, Codable {
     case any, decades, range
     var id: String { rawValue }
@@ -221,7 +230,7 @@ struct FilterState: Equatable, Codable {
 
     /// Chip text for the year filter, or nil when it's off.
     var yearLabel: String? {
-        if yearMode == .decades && !decades.isEmpty { return decades.sorted().map { "\(String($0))s" }.joined(separator: " + ") }
+        if yearMode == .decades && !decades.isEmpty { return decades.sorted(by: >).map { DecadeLabel.text($0) }.joined(separator: " + ") }
         if yearMode == .range {
             switch (yearMin, yearMax) {
             case let (a?, b?): return "\(String(min(a, b)))–\(String(max(a, b)))"
@@ -299,9 +308,9 @@ enum ShelfBuilder {
         for genre in genreCounts.sorted(by: { $0.value > $1.value }).prefix(4).map(\.key) {
             add("genre-\(genre)", genre, cards.filter { $0.genres.contains(genre) })
         }
-        let decades = Set(cards.compactMap(\.decade)).filter { $0 >= 1930 }.sorted()
+        let decades = Set(cards.compactMap(\.decade)).filter { $0 >= 1930 }.sorted(by: >)   // newest first
         for d in decades {
-            add("decade-\(d)", "The \(String(d))s", cards.filter { $0.decade == d })
+            add("decade-\(d)", AppConfig.text("filters.decade_shelf", ["label": DecadeLabel.text(d)]), cards.filter { $0.decade == d })
         }
         return shelves
     }

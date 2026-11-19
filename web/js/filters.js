@@ -1,7 +1,12 @@
 // Client-side filtering, sorting and Discover shelves over the discovery pool, for instant results.
 // Mirrors backend/app/discovery.py and ios/Phonarr/Core/Filters.swift: keep all three in step.
 // Pure functions with no DOM access (config only), so `node --test web/tests/*.test.mjs` can check them.
-import { cfg } from "./config.js";
+import { cfg, text } from "./config.js";
+
+/** "2010s", or "1960s & older" for the group the gateway puts everything up to filters.oldest_decade in. */
+export function decadeLabel(d) {
+  return text(Number(d) <= cfg("filters.oldest_decade", 1960) ? "filters.oldest_decade" : "filters.decade", { decade: d });
+}
 
 export const SORTS = [
   ["trending", "New & trending"],
@@ -210,7 +215,7 @@ export function buildShelves(cards, minimum = 3, thisYear = new Date().getFullYe
   for (const c of cards) for (const g of c.genres || []) counts.set(g, (counts.get(g) || 0) + 1);
   const topGenres = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([g]) => g);
   for (const g of topGenres) add(`genre-${g}`, g, cards.filter((c) => (c.genres || []).includes(g)));
-  const decades = [...new Set(cards.map((c) => c.decade).filter((d) => d >= 1930))].sort((a, b) => a - b);
-  for (const d of decades) add(`decade-${d}`, `The ${d}s`, cards.filter((c) => c.decade === d));
+  const decades = [...new Set(cards.map((c) => c.decade).filter((d) => d >= 1930))].sort((a, b) => b - a);   // newest first
+  for (const d of decades) add(`decade-${d}`, text("filters.decade_shelf", { label: decadeLabel(d) }), cards.filter((c) => c.decade === d));
   return shelves;
 }

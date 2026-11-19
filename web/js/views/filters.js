@@ -2,7 +2,7 @@
 // Only filters with real choices in the current catalogue (the gateway's facets) are shown.
 import { html, useState } from "../../vendor/preact-htm.js";
 import { Icon } from "../icons.js";
-import { SORTS, sortLabel, emptyFilters, activeCount, neighboursFor, runtimeSteps, YEAR_MODES, DEFAULT_SORT } from "../filters.js";
+import { SORTS, decadeLabel, sortLabel, emptyFilters, activeCount, neighboursFor, runtimeSteps, YEAR_MODES, DEFAULT_SORT } from "../filters.js";
 import { sourceLabel, capitalize } from "../models.js";
 import { Group, SelectRow, Sheet } from "./components.js";
 
@@ -85,7 +85,7 @@ function YearGroup({ f, set, facets }) {
         aria-pressed=${f.year_mode === m} onClick=${() => mode(m)}>${label}</button>`)}
     </div></div>
     ${f.year_mode === "decades" && facets.decades?.length > 0 && html`<div class="group-pad">
-      <${Chips} values=${facets.decades} label=${(v) => `${v}s`} isOn=${(v) => f.decades.includes(Number(v))}
+      <${Chips} values=${facets.decades} label=${decadeLabel} isOn=${(v) => f.decades.includes(Number(v))}
         toggle=${(v) => set({ decades: f.decades.includes(Number(v)) ? f.decades.filter((d) => d !== Number(v)) : [...f.decades, Number(v)] })} />
     </div>`}
     ${f.year_mode === "range" && years && html`
@@ -144,7 +144,7 @@ export function FilterSheet({ type, filters, onChange, facets, count, onClose })
 
 /** The year filter as chip text, or null when it's off. */
 export function yearLabel(f) {
-  if (f.year_mode === "decades" && f.decades.length) return [...f.decades].sort().map((d) => `${d}s`).join(" + ");
+  if (f.year_mode === "decades" && f.decades.length) return [...f.decades].sort((a, b) => b - a).map(decadeLabel).join(" + ");
   if (f.year_mode === "range" && (f.year_min || f.year_max)) {
     const [a, b] = [f.year_min, f.year_max];
     return a && b ? `${Math.min(a, b)}–${Math.max(a, b)}` : a ? `${a} on` : `Up to ${b}`;

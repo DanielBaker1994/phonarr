@@ -23,6 +23,7 @@
     "clock_warn_seconds": 120
   },
   "filters": {
+    "oldest_decade": 1960,
     "neighbour_min_overlap": 0.15,
     "english_names": [
       "English"

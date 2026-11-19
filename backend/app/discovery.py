@@ -23,7 +23,9 @@ SORTS = ("title", "trending", "year_desc", "year_asc", "rating", "popularity", "
 
 
 def decade(year: int | None) -> int | None:
-    return (year // 10) * 10 if year else None
+    """The decade a title is grouped under. Everything up to discovery.oldest_decade shares one group
+    (1960 = "1960s & older"), so the decade chips and shelves don't fill up with thin early decades."""
+    return max((year // 10) * 10, cfg("discovery.oldest_decade")) if year else None
 
 
 def _csv(value: str | None) -> list[str]:
@@ -95,9 +97,9 @@ def apply_filters(cards: list[dict], f: dict[str, Any], neighbour_map: dict[str,
             nmap = genre_neighbours(cards) if neighbour_map is None else neighbour_map
             genres |= set(neighbours_for(genres, nmap, excluded | set(_csv(f.get("neighbours_off")))))
         out = [c for c in out if genres & set(c["genres"])]
-    if f.get("decade"):
-        out = [c for c in out if c.get("decade") == int(f["decade"])]
-    decades = {int(d) for d in _csv(f.get("decades"))}
+    if f.get("decade"):   # an older decade (decade=1920) means its group (1960 = "1960s & older")
+        out = [c for c in out if c.get("decade") == decade(int(f["decade"]))]
+    decades = {decade(int(d)) for d in _csv(f.get("decades"))}
     if decades:
         out = [c for c in out if c.get("decade") in decades]
     if f.get("year_min"):
@@ -186,7 +188,7 @@ def facets(cards: Iterable[dict]) -> dict:
 
     out = {
         "genres": count(g for c in cards for g in c["genres"]),
-        "decades": sorted(count(c.get("decade") for c in cards), key=lambda d: d["value"]),
+        "decades": sorted(count(c.get("decade") for c in cards), key=lambda d: -int(d["value"])),   # newest first
         "runtime": [{"value": b, "count": n} for b in RUNTIME_BUCKETS
                     if (n := sum(1 for c in cards if c.get("runtime")
                                  and RUNTIME_BUCKETS[b][0] <= c["runtime"] <= RUNTIME_BUCKETS[b][1]))],
@@ -239,7 +241,7 @@ def similarity(seed: dict, other: dict) -> tuple[float, list[str]]:
         gap = abs(seed["year"] - other["year"])
         score += 2.0 * max(0.0, 1 - gap / 25)
         if gap <= 5:
-            reasons.append(f"Same era ({other['decade']}s)")
+            reasons.append(f"Same era ({other['year'] // 10 * 10}s)")   # the real decade, not the grouped one
     if seed.get("language") and seed.get("language") == other.get("language"):
         score += 0.5
     if seed.get("rating") is not None and other.get("rating") is not None:

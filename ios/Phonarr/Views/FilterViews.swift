@@ -223,17 +223,14 @@ struct GenreChipFlow: View {
     }
 }
 
-/// Removable chips for the filters that are on, plus a result count.
+/// Removable chips for the filters that are on. No "N of M" count: it read like a cap on the catalogue.
 struct ActiveFilterBar: View {
     @Binding var filters: FilterState
-    let shown: Int
-    let total: Int
 
     var body: some View {
         if filters.activeCount > 0 || filters.sort != .yearDesc || filters.englishOnly {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    Text("\(shown) of \(total)").font(.caption).foregroundStyle(.secondary)
                     if filters.sort != .yearDesc {
                         chip(filters.sort.label, systemImage: "arrow.up.arrow.down") { filters.sort = .yearDesc }
                     }

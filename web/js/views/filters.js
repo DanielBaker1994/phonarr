@@ -158,15 +158,14 @@ export function lengthLabel(f) {
   return f.runtime_min ? `${f.runtime_min}+ min` : `Up to ${f.runtime_max} min`;
 }
 
-/** Removable chips for the filters that are on, plus "N of M". */
-export function ActiveFilterBar({ filters: f, onChange, shown, total }) {
+/** Removable chips for the filters that are on. No "N of M" count: it read like a cap on the catalogue. */
+export function ActiveFilterBar({ filters: f, onChange }) {
   if (activeCount(f) === 0 && f.sort === DEFAULT_SORT && !f.english_only) return null;
   const set = (patch) => onChange({ ...f, ...patch });
   const chip = (text, remove, icon = "x") => html`<button class="chip on small" onClick=${remove} aria-label=${`Remove filter ${text}`}>
     ${text} <${Icon} name=${icon} size=${11} stroke=${3} /></button>`;
   const year = yearLabel(f), length = lengthLabel(f);
   return html`<div class="filter-bar">
-    <span class="small muted">${shown} of ${total}</span>
     ${f.sort !== DEFAULT_SORT && chip(sortLabel(f.sort), () => set({ sort: DEFAULT_SORT }), "sort")}
     ${f.english_only && chip("English only", () => set({ english_only: false }))}
     ${f.genres.map((g) => chip(g, () => set({ genres: f.genres.filter((x) => x !== g) })))}

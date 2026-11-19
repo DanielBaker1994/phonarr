@@ -134,7 +134,7 @@ function Grid({ type }) {
     </div>
     <${ServiceBanner} only=${type} />
     ${state.discoverError[type] && html`<${Notice}>${state.discoverError[type]}<//>`}
-    <${ActiveFilterBar} filters=${filters} onChange=${setFilters} shown=${shown.length} total=${all.length} />
+    <${ActiveFilterBar} filters=${filters} onChange=${setFilters} />
     ${loading && !all.length ? html`<div class="center pad"><${Spinner} /></div>` : html`<div class="grid">${shown.slice(0, limit).map(cell)}</div>
       ${shown.length > limit && html`<div class="load-more" ref=${sentinel}>
         <button class="btn" onClick=${() => setLimit(limit + pageSize)}>Show more (${shown.length - limit} left)</button></div>`}`}

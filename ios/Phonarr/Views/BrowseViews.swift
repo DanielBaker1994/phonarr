@@ -252,7 +252,7 @@ struct MediaGridView: View {
                 Label(err, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.orange)
                     .padding(.horizontal)
             }
-            ActiveFilterBar(filters: filters, shown: shown.count, total: all.count)
+            ActiveFilterBar(filters: filters)
             LazyVGrid(columns: columns, spacing: 18) {
                 ForEach(shown.prefix(limit), id: \.key) { card in cell(card) }
             }

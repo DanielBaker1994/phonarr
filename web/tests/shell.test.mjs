@@ -30,3 +30,13 @@ test("app.css keeps form fields at 16 px or more (iOS Safari zooms into smaller 
     assert.ok(Number(m[2]) >= 16, `field font-size ${m[2]}px in: ${m[0].slice(0, 80)}`);
   }
 });
+
+test('poster <img> sets loading="lazy" before src (Preact applies attributes in order)', async () => {
+  for (const f of [...(await jsFiles("js/")), ...(await jsFiles("js/views/"))]) {
+    for (const m of (await read(f)).matchAll(/<img\b[^>]*>/g)) {
+      const tag = m[0], lazy = tag.indexOf('loading="lazy"'), src = tag.search(/\ssrc=/);
+      if (src < 0) continue;
+      assert.ok(lazy >= 0 && lazy < src, `${f}: put loading="lazy" before src in ${tag.slice(0, 90)}`);
+    }
+  }
+});

@@ -74,7 +74,9 @@ export function Poster({ src, title }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
   return src && !failed
-    ? html`<img class="poster-img" src=${src} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+    // loading="lazy" must come before src: Preact sets attributes in this order, and with src first Chromium
+    // sometimes fetches every poster at once when Discover remounts (~700 posters, 12-15 MB, 2026-11-20).
+    ? html`<img class="poster-img" loading="lazy" decoding="async" src=${src} alt="" referrerpolicy="no-referrer"
         onError=${() => setFailed(true)} />`
     : html`<div class="poster-img placeholder" aria-hidden="true"><${Icon} name="film" size=${28} stroke=${1.5} /><span>${title || ""}</span></div>`;
 }
